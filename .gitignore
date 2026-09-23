@@ -10,3 +10,6 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Cliente do Prisma (gerado por "npx prisma generate")
+backend/src/generated/

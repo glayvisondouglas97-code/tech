@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fase 1 (infraestrutura) entregue, aguardando teste do usuário.**
+Status: **Fase 1 concluída e testada pelo usuário. Fase 2 (backend) entregue, aguardando teste.**
 
 ## 1. Versão da Evolution API
 
@@ -29,7 +29,8 @@ Autenticação: header `apikey: <AUTHENTICATION_API_KEY>` (fica só no backend).
 | Enviar texto | `POST /message/sendText/{instance}` (`number`, `text`) |
 | Enviar imagem/documento | `POST /message/sendMedia/{instance}` (`number`, `mediatype`, `mimetype`, `caption`, `fileName`, `media`) |
 | Enviar áudio de voz | `POST /message/sendWhatsAppAudio/{instance}` (`number`, `audio`, `delay`) |
-| Marcar como lida | `POST /chat/markMessageAsRead/{instance}` |
+| Buscar mensagens salvas (histórico) | `POST /chat/findMessages/{instance}` (`where.messageTimestamp.gte/lte`, `page`, `offset`) |
+| Marcar como lida (só aceita telefone, não @lid) | `POST /chat/markMessageAsRead/{instance}` |
 | Baixar mídia de uma mensagem | `POST /chat/getBase64FromMediaMessage/{instance}` |
 
 Eventos de webhook usados:
@@ -96,7 +97,7 @@ O `Contact` fica separado da conversa porque o mesmo lead pode falar com vários
 ideias futuras ("não contatar", aviso de lead em outro número, relatórios) sem precisar implementá-las agora.
 
 Dependências previstas (mínimo):
-- backend: express, socket.io, prisma/@prisma/client e multer (upload);
+- backend: express, prisma + @prisma/client + @prisma/adapter-pg + pg (o Prisma 7 exige o driver), socket.io (Fase 4) e multer (upload, Fase 6). O TypeScript roda direto no Node 24, sem tsx nem etapa de build;
 - frontend: react, react-dom, socket.io-client e vite;
 - senhas com `crypto.scrypt`, nativo do Node, sem biblioteca.
 
@@ -113,6 +114,23 @@ Dependências previstas (mínimo):
    settings automaticamente).
 6. Mídia: gravar e enviar áudio (sem ffmpeg no backend), imagens e documentos, e ouvir e ver o que chegar.
 7. Login, backup (`pg_dump` dos 2 bancos e do volume de mídias), Caddy com HTTPS e deploy no VPS.
+
+## 4.1 Como a Fase 2 funciona
+
+- **Ao iniciar**, o backend lê os números da Evolution, configura em cada um o webhook (`http://app:3000/webhook/evolution`
+  com o header `x-webhook-token`) e as opções (ignorar grupos, não marcar como lida). Na primeira vez que vê um número,
+  importa o histórico dos últimos 14 dias. Depois repete a leitura a cada 5 minutos.
+- **Histórico**: vem do banco da própria Evolution (`/chat/findMessages`), que guarda o que o WhatsApp manda ao
+  conectar. O evento `MESSAGES_SET` só dispara uma nova importação, 20s depois do último lote.
+- **Mensagens**: `messages.upsert` (recebidas e enviadas pelo celular) e `send.message` (enviadas pelo sistema)
+  passam por uma fila única, uma de cada vez. Isso evita contato ou conversa duplicados quando webhooks chegam juntos.
+- **@lid**: o contato guarda `phoneJid` e `lidJid`. Se a mesma pessoa aparecer primeiro como dois contatos, eles são
+  juntados, com as conversas, mensagens e não lidas somadas, assim que uma mensagem mostra os dois identificadores.
+- **Envio**: confere se o número está conectado, envia pela Evolution, grava a mensagem e marca como lidas no
+  WhatsApp as mensagens do lead que estavam sem resposta. A Evolution só aceita marcar como lida pelo telefone, então
+  um contato que só tem @lid não recebe o tique azul.
+- **Não lidas**: somam com mensagem do lead ao vivo, zeram quando respondemos (pelo sistema ou pelo celular) e zeram
+  ao abrir a conversa no sistema. O histórico importado não soma não lidas.
 
 ## 5. Decisões tomadas
 

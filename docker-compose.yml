@@ -77,6 +77,26 @@ services:
     volumes:
       - evolution_instances:/evolution/instances
 
+  app:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      evolution:
+        condition: service_started
+    # Só acessível do próprio computador. No VPS, quem fica exposto é o Caddy (Fase 7).
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/central
+      EVOLUTION_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      # A Evolution entrega os webhooks pela rede interna do Docker, com este token secreto.
+      WEBHOOK_URL: http://app:3000/webhook/evolution
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?defina WEBHOOK_TOKEN no arquivo .env}
+      HISTORY_DAYS: 14
+
 volumes:
   postgres_data:
   redis_data:

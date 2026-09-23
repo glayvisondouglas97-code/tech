@@ -1,0 +1,78 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Um número de WhatsApp (= uma instância na Evolution).
+model Instance {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique // nome da instância na Evolution (ex.: whatsapp-01)
+  nickname  String? // apelido exibido (ex.: "WhatsApp 3 - João")
+  phoneJid  String? // número conectado (ex.: 5511999999999@s.whatsapp.net)
+  status    String   @default("close") // open | connecting | close
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversations Conversation[]
+  messages      Message[]
+}
+
+// Um lead. É o mesmo contato em todos os números. Guarda o telefone e o @lid, para a mesma pessoa não virar dois contatos.
+model Contact {
+  id        Int      @id @default(autoincrement())
+  phoneJid  String?  @unique // 5511999999999@s.whatsapp.net
+  lidJid    String?  @unique // 123456789012345@lid
+  name      String? // nome do perfil do WhatsApp (pushName)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversations Conversation[]
+}
+
+// A conversa de um lead com um dos nossos números.
+model Conversation {
+  id                 Int      @id @default(autoincrement())
+  instanceId         Int
+  contactId          Int
+  unreadCount        Int      @default(0)
+  leadReplied        Boolean  @default(false) // aba "Responderam"
+  lastMessageAt      DateTime
+  lastMessagePreview String?
+  lastMessageFromMe  Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  instance Instance  @relation(fields: [instanceId], references: [id])
+  contact  Contact   @relation(fields: [contactId], references: [id])
+  messages Message[]
+
+  @@unique([instanceId, contactId])
+  @@index([lastMessageAt, id])
+  @@index([leadReplied, lastMessageAt])
+  @@index([instanceId, lastMessageAt])
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  instanceId     Int
+  conversationId Int
+  waId           String // ID da mensagem no WhatsApp (key.id): evita duplicar webhooks repetidos
+  remoteJid      String // identificador do contato usado pelo WhatsApp nesta mensagem
+  fromMe         Boolean
+  type           String // text | image | video | audio | document | sticker | reaction | other
+  text           String? // texto ou legenda
+  fileName       String? // nome do documento
+  status         String? // PENDING | SERVER_ACK | DELIVERY_ACK | READ | PLAYED | ERROR
+  sentAt         DateTime
+  createdAt      DateTime @default(now())
+
+  instance     Instance     @relation(fields: [instanceId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([instanceId, waId])
+  @@index([conversationId, sentAt])
+}
