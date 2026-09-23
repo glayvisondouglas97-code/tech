@@ -1,0 +1,6 @@
+# Mantém finais de linha no padrão Linux (LF), mesmo clonando no Windows.
+# Scripts e arquivos lidos dentro dos containers quebram com CRLF.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

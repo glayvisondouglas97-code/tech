@@ -1,6 +1,6 @@
-# Central de WhatsApp: plano (Fase 0)
+# Central de WhatsApp: plano
 
-Status: **aguardando respostas às perguntas da seção 5** antes de iniciar a Fase 1.
+Status: **Fase 1 (infraestrutura) entregue, aguardando teste do usuário.**
 
 ## 1. Versão da Evolution API
 
@@ -106,14 +106,23 @@ Dependências previstas (mínimo):
 1. Infra local: Compose com Evolution v2.3.7, Postgres e Redis; conectar 1 número pelo Manager da Evolution
    (`http://localhost:8080/manager`).
 2. Backend: webhook com token, deduplicação e tratamento de @lid; salvar contatos, conversas e mensagens;
-   endpoint de envio de texto.
-3. Frontend: tela de conversas (ler e responder texto), com filtro por número e filtro "responderam".
+   importar o histórico dos últimos 14 dias; endpoint de envio de texto (que marca como lida ao responder).
+3. Frontend: tela de conversas (ler e responder texto), com as abas "Responderam" e "Todas" e o filtro por número.
 4. Tempo real com Socket.io.
 5. Tela de números: criar instância, QR Code, status, apelido e reconexão (o backend configura webhook e
    settings automaticamente).
 6. Mídia: gravar e enviar áudio (sem ffmpeg no backend), imagens e documentos, e ouvir e ver o que chegar.
 7. Login, backup (`pg_dump` dos 2 bancos e do volume de mídias), Caddy com HTTPS e deploy no VPS.
 
-## 5. Perguntas em aberto
+## 5. Decisões tomadas
 
-Ver a resposta da Fase 0 na conversa. As decisões serão registradas aqui.
+1. **Histórico ao conectar um número**: importar o histórico recente que o WhatsApp envia ao conectar, só de
+   conversas individuais e só dos **últimos 14 dias**. As mídias antigas são baixadas quando alguém clicar.
+2. **Tique azul (lida no WhatsApp)**: só marcar como lida no WhatsApp **quando a conversa for respondida pelo
+   sistema**, nunca só por abrir. A instância fica com `readMessages = false`. O contador de não lidas *do
+   sistema* zera ao abrir a conversa.
+3. **Lista de conversas**: duas abas, **Responderam** e **Todas**, mais o filtro por número.
+4. **A mensagem inicial continua saindo pelo celular**: o MVP não terá o botão "nova conversa".
+5. **Usuários**: você e a equipe, cada um com login próprio e todos vendo todos os números (por enquanto).
+6. **Ambiente local**: Windows com Docker Desktop, com instruções em PowerShell.
+7. **Produção**: domínio e VPS já disponíveis (Fase 7).
