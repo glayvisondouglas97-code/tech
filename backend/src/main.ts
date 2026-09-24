@@ -13,15 +13,20 @@ app.get('/health', (_req, res) => {
 app.use('/webhook', webhookRouter);
 app.use('/api', apiRouter);
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, (error?: Error) => {
+  if (error) {
+    console.error(`Não foi possível abrir a porta ${config.port}:`, error.message);
+    process.exit(1);
+  }
   console.log(`Backend no ar na porta ${config.port}`);
   startInstanceSync();
 });
 
-function shutdown() {
+function shutdown(signal: string) {
+  console.log(`Encerrando (${signal})...`);
   server.close(() => {
     void prisma.$disconnect().finally(() => process.exit(0));
   });
 }
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
