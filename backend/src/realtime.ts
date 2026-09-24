@@ -2,6 +2,7 @@
 // Hoje todos recebem tudo. Quando existirem permissões por número, basta enviar para "salas" por número aqui.
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
+import { userFromCookie } from './auth.ts';
 import { prisma } from './db.ts';
 import { conversationDto, instanceDto, messageDto } from './dto.ts';
 import type { Instance, Message } from './generated/prisma/client.ts';
@@ -10,6 +11,21 @@ let io: Server | undefined;
 
 export function startRealtime(server: HttpServer): void {
   io = new Server(server, { serveClient: false });
+  // Só quem está logado recebe as atualizações.
+  io.use(async (socket, next) => {
+    const user = await userFromCookie(socket.handshake.headers.cookie).catch(() => null);
+    if (!user) return next(new Error('unauthorized'));
+    socket.data.userId = user.id;
+    next();
+  });
+}
+
+// Derruba as conexões abertas de um usuário (ex.: ao ser desativado).
+export async function disconnectUser(userId: number): Promise<void> {
+  if (!io) return;
+  for (const socket of await io.fetchSockets()) {
+    if (socket.data.userId === userId) socket.disconnect(true);
+  }
 }
 
 export async function publishConversation(id: number): Promise<void> {

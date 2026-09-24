@@ -5,20 +5,55 @@ import {
   PAGE_SIZE,
   type ConversationItem,
   type ConversationRemovedEvent,
+  type CurrentUser,
   type InstanceInfo,
   type Tab,
 } from './api.ts';
 import { ChatPanel } from './components/ChatPanel.tsx';
 import { ConversationList } from './components/ConversationList.tsx';
+import { LoginPage } from './components/LoginPage.tsx';
 import { NumbersPage } from './components/NumbersPage.tsx';
-import { useReconnect, useSocketEvent } from './socket.ts';
+import { PasswordModal } from './components/PasswordModal.tsx';
+import { UsersPage } from './components/UsersPage.tsx';
+import { socket, useReconnect, useSocketEvent } from './socket.ts';
 
-// O endereço guarda a tela: #numeros para a tela de números, #12 para a conversa 12 aberta (o F5 mantém).
-const pageFromHash = () => (window.location.hash === '#numeros' ? 'numeros' : 'conversas');
+// O endereço guarda a tela: #numeros, #usuarios, ou #12 para a conversa 12 aberta (o F5 mantém).
+type Page = 'conversas' | 'numeros' | 'usuarios';
+const pageFromHash = (): Page =>
+  window.location.hash === '#numeros' ? 'numeros' : window.location.hash === '#usuarios' ? 'usuarios' : 'conversas';
 const idFromHash = () => Number(window.location.hash.slice(1)) || null;
 
+// Primeiro confere o login. Sem login, só a tela de entrada; com login, o sistema e o tempo real.
 export function App() {
-  const [page, setPage] = useState<'conversas' | 'numeros'>(pageFromHash);
+  const [user, setUser] = useState<CurrentUser | null | undefined>(undefined); // undefined = conferindo
+
+  useEffect(() => {
+    api.me().then(setUser, () => setUser(null));
+    const onExpired = () => setUser(null);
+    window.addEventListener('auth-expired', onExpired);
+    return () => window.removeEventListener('auth-expired', onExpired);
+  }, []);
+
+  useEffect(() => {
+    if (user) socket.connect();
+    else socket.disconnect();
+  }, [user]);
+
+  if (user === undefined) return <main className="chat-empty splash">Carregando…</main>;
+  if (!user) return <LoginPage onLogin={setUser} />;
+  return (
+    <Workspace
+      user={user}
+      onLogout={() => {
+        void api.logout().finally(() => setUser(null));
+      }}
+    />
+  );
+}
+
+function Workspace({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
+  const [page, setPage] = useState<Page>(pageFromHash);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [tab, setTab] = useState<Tab>('responderam');
   const [instanceId, setInstanceId] = useState<number | null>(null);
@@ -47,18 +82,27 @@ export function App() {
   );
 
   useEffect(() => {
-    const hash = page === 'numeros' ? '#numeros' : selectedId ? `#${selectedId}` : '';
+    const hash = page !== 'conversas' ? `#${page}` : selectedId ? `#${selectedId}` : '';
     window.history.replaceState(null, '', hash || window.location.pathname);
   }, [page, selectedId]);
 
+  const passwordModal = changingPassword && <PasswordModal onClose={() => setChangingPassword(false)} />;
+
   if (page === 'numeros') {
     return <NumbersPage instances={instances} onInstanceSaved={saveInstance} onBack={() => setPage('conversas')} />;
+  }
+  if (page === 'usuarios' && user.isAdmin) {
+    return <UsersPage me={user} onBack={() => setPage('conversas')} />;
   }
 
   return (
     <div className={`app ${selectedId ? 'chat-open' : ''}`}>
       <ConversationList
+        user={user}
         onOpenNumbers={() => setPage('numeros')}
+        onOpenUsers={() => setPage('usuarios')}
+        onChangePassword={() => setChangingPassword(true)}
+        onLogout={onLogout}
         tab={tab}
         onTabChange={setTab}
         instances={instances}
@@ -75,6 +119,7 @@ export function App() {
           <p>Selecione uma conversa</p>
         </main>
       )}
+      {passwordModal}
     </div>
   );
 }

@@ -2,7 +2,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 
-export const socket = io();
+// Só conecta depois do login (ver App). Se o servidor recusar por falta de login, a tela volta para o login.
+export const socket = io({ autoConnect: false });
+socket.on('connect_error', (error) => {
+  if (error.message === 'unauthorized') window.dispatchEvent(new Event('auth-expired'));
+});
+// O servidor só derruba a conexão de alguém que foi desativado ou teve a senha redefinida: volta para o login.
+socket.on('disconnect', (reason) => {
+  if (reason === 'io server disconnect') window.dispatchEvent(new Event('auth-expired'));
+});
 
 // Mantém sempre a versão mais recente da função, sem precisar reinscrever o evento.
 function useLatest<T>(value: T) {

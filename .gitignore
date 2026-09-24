@@ -18,3 +18,6 @@ backend/src/generated/
 frontend/dist/
 backend/public/
 backend/media/
+
+# Backups (ficam só no servidor)
+backups/

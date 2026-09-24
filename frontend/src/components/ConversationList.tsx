@@ -1,10 +1,14 @@
 import type { ConversationsState } from '../App.tsx';
-import type { InstanceInfo, Tab } from '../api.ts';
+import type { CurrentUser, InstanceInfo, Tab } from '../api.ts';
 import { contactName, formatPhone, instanceColor, instanceLabel, listTime } from '../format.ts';
 import { useOnline } from '../socket.ts';
 
 type Props = {
+  user: CurrentUser;
   onOpenNumbers: () => void;
+  onOpenUsers: () => void;
+  onChangePassword: () => void;
+  onLogout: () => void;
   tab: Tab;
   onTabChange: (tab: Tab) => void;
   instances: InstanceInfo[];
@@ -16,7 +20,8 @@ type Props = {
 };
 
 export function ConversationList(props: Props) {
-  const { onOpenNumbers, tab, onTabChange, instances, instanceId, onInstanceChange, conversations, selectedId, onSelect } = props;
+  const { user, onOpenNumbers, onOpenUsers, onChangePassword, onLogout } = props;
+  const { tab, onTabChange, instances, instanceId, onInstanceChange, conversations, selectedId, onSelect } = props;
   const online = useOnline();
   const disconnected = instances.filter((i) => i.status !== 'open').length;
   // Apelido e cor vêm da lista de números (atualizada em tempo real), não da conversa.
@@ -99,6 +104,23 @@ export function ConversationList(props: Props) {
           <li className="list-info">{tab === 'responderam' ? 'Nenhum lead respondeu ainda.' : 'Nenhuma conversa.'}</li>
         )}
       </ul>
+
+      <footer className="sidebar-footer">
+        <span className="sidebar-user" title={user.email}>
+          👤 {user.name}
+        </span>
+        <button className="link-button" onClick={onChangePassword}>
+          Minha senha
+        </button>
+        {user.isAdmin && (
+          <button className="link-button" onClick={onOpenUsers}>
+            Usuários
+          </button>
+        )}
+        <button className="link-button" onClick={onLogout}>
+          Sair
+        </button>
+      </footer>
     </aside>
   );
 }

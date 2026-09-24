@@ -30,11 +30,19 @@ export type Tab = 'responderam' | 'todas';
 
 export const PAGE_SIZE = 50;
 
+export type CurrentUser = { id: number; name: string; email: string; isAdmin: boolean; active: boolean };
+
+// Sessão expirada ou encerrada (ex.: senha redefinida): avisa o App, que volta para a tela de login.
+function checkAuth(response: Response, path: string) {
+  if (response.status === 401 && path !== '/auth/login') window.dispatchEvent(new Event('auth-expired'));
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   });
+  checkAuth(response, path);
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.error ?? `Erro ${response.status}`);
@@ -49,6 +57,7 @@ async function upload<T>(path: string, body: Blob): Promise<T> {
     headers: { 'Content-Type': body.type || 'application/octet-stream' },
     body,
   });
+  checkAuth(response, path);
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     throw new Error(data?.error ?? `Erro ${response.status}`);
@@ -66,6 +75,23 @@ function query(params: Record<string, string | number | undefined>): string {
 }
 
 export const api = {
+  me: () => request<CurrentUser>('/auth/me'),
+  login: (email: string, password: string) =>
+    request<CurrentUser>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  logout: () => request<void>('/auth/logout', { method: 'POST' }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>('/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+
+  users: () => request<CurrentUser[]>('/users'),
+  createUser: (name: string, email: string, isAdmin: boolean) =>
+    request<{ user: CurrentUser; temporaryPassword: string }>('/users', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, isAdmin }),
+    }),
+  updateUser: (id: number, changes: { active?: boolean; isAdmin?: boolean }) =>
+    request<CurrentUser>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+  resetPassword: (id: number) => request<{ temporaryPassword: string }>(`/users/${id}/reset-password`, { method: 'POST' }),
+
   instances: () => request<InstanceInfo[]>('/instances'),
 
   conversations: (params: { tab: Tab; instanceId?: number; cursor?: number; limit?: number }) =>

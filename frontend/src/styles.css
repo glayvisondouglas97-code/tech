@@ -647,6 +647,161 @@ textarea {
   font-size: 0.85rem;
 }
 
+/* ---------- Rodapé da lista (usuário) ---------- */
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.sidebar-user {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* ---------- Login ---------- */
+.splash {
+  height: 100vh;
+}
+
+.login-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(360px, 100%);
+  padding: 28px 24px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 1px 3px #0b141a1f;
+}
+
+.login-card h1 {
+  margin: 0 0 6px;
+  font-size: 1.3rem;
+  text-align: center;
+}
+
+.login-card label,
+.stack-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.login-card input,
+.stack-form input,
+.add-user input:not([type='checkbox']) {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.login-card .primary-button {
+  padding: 11px;
+}
+
+.login-help {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* ---------- Usuários ---------- */
+.add-user {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-user input:not([type='checkbox']) {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.notice {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #e7f8f3;
+  border: 1px solid #b7e6d8;
+}
+
+.notice p {
+  margin: 0 0 6px;
+}
+
+.notice code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--panel);
+  font-size: 1.05rem;
+  user-select: all;
+}
+
+.tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--selected);
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.tag.off {
+  background: #fde7e5;
+  color: var(--danger);
+}
+
+.number-row.inactive strong {
+  color: var(--muted);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 0.85rem;
+}
+
+.link-button.danger {
+  color: var(--danger);
+}
+
 /* ---------- Tela de números ---------- */
 .numbers-page {
   max-width: 900px;

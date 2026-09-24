@@ -3,7 +3,8 @@
 Sistema web próprio que junta, num só lugar, as conversas de vários números de WhatsApp conectados pela
 [Evolution API](https://github.com/evolution-foundation/evolution-api) (versão fixa **v2.3.7**).
 
-O plano completo e as decisões estão em [`docs/PLANO.md`](docs/PLANO.md).
+O plano completo e as decisões estão em [`docs/PLANO.md`](docs/PLANO.md). Para colocar no VPS (domínio + HTTPS), siga
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Serviços
 
@@ -13,9 +14,11 @@ O plano completo e as decisões estão em [`docs/PLANO.md`](docs/PLANO.md).
 | `postgres` | Banco `evolution` (usado pela Evolution) e banco `central` (usado pelo nosso sistema) |
 | `redis` | Cache da Evolution |
 | `app` | Nosso sistema: o site (tela de conversas) e o backend, que recebe os webhooks, grava as conversas e envia as respostas |
+| `backup` | Todo dia às 3h copia os dois bancos e as mídias para a pasta `backups` |
+| `caddy` | Só no VPS: HTTPS automático no seu domínio (arquivo `docker-compose.prod.yml`) |
 
 A Evolution (`127.0.0.1:8080`) e o backend (`127.0.0.1:3100`) só ficam acessíveis no próprio computador,
-nunca pela rede.
+nunca pela rede. O sistema exige login.
 
 ## Como rodar no Windows
 
@@ -64,7 +67,18 @@ docker compose logs -f app
 
 Aperte `Ctrl + C` para sair dos logs. Os serviços continuam rodando.
 
-### 4. Conectar os números
+### 4. Criar o primeiro acesso (só na primeira vez)
+
+Crie o seu usuário de administrador (troque o nome e o e-mail):
+
+```powershell
+docker compose exec app node src/cli.ts criar-admin "Seu Nome" voce@email.com
+```
+
+O comando mostra uma **senha provisória**. Abra **<http://localhost:3100>**, entre com o e-mail e essa senha e troque-a
+em **Minha senha** (rodapé da lista de conversas). Depois, cadastre a equipe em **Usuários** (ver "Equipe" abaixo).
+
+### 5. Conectar os números
 
 1. Abra **<http://localhost:3100>** e clique em **Números**, no alto da lista de conversas.
 2. Digite um apelido (ex.: `WhatsApp 3 - João`) e clique em **+ Adicionar número**.
@@ -100,6 +114,34 @@ Abra **<http://localhost:3100>** no navegador.
 - **Mídias recebidas**: áudios têm player, imagens aparecem no chat (clique para ampliar) e documentos têm o botão
   **Baixar**. As mídias ficam guardadas no volume `media_data` do Docker (não no banco).
 
+## Equipe (login)
+
+- Cada pessoa entra com o próprio e-mail e senha. O login dura 30 dias no navegador (ou até clicar em **Sair**).
+- **Usuários** (rodapé, só para administradores): **+ Adicionar** cria o acesso e mostra uma **senha provisória**, que
+  você passa para a pessoa. Ela troca em **Minha senha** no primeiro acesso.
+- **Redefinir senha** gera uma provisória nova (para quem esqueceu). **Desativar** tira o acesso na hora: a tela da
+  pessoa volta para o login. **Tornar admin** permite que a pessoa também gerencie usuários.
+- Depois de 10 senhas erradas seguidas para o mesmo e-mail, o login dele fica bloqueado por 15 minutos.
+- **Ficou sem acesso de administrador?** Pelo terminal:
+  `docker compose exec app node src/cli.ts redefinir-senha voce@email.com` (mostra uma senha provisória nova).
+
+## Backup
+
+- O serviço `backup` copia **todo dia às 3h** (horário de Brasília) os bancos `evolution` (sessões dos números) e
+  `central` (conversas e usuários), e as **mídias**, para a pasta **`backups`** do projeto. Guarda os últimos 7 dias.
+- Backup na hora: `docker compose exec backup sh /backup.sh agora`
+- A pasta `backups` fica no mesmo computador/servidor. **Copie-a de vez em quando para outro lugar** (seu computador,
+  Google Drive). Se o servidor for perdido, é essa cópia que salva os dados. No VPS, ver [`docs/DEPLOY.md`](docs/DEPLOY.md).
+- **Restaurar** (substitui os dados atuais pelos do backup; troque a data pela do arquivo que quer usar):
+
+  ```powershell
+  docker compose stop app evolution
+  docker compose exec backup pg_restore -d central --clean --if-exists /backups/central_2026-09-24_0300.dump
+  docker compose exec backup pg_restore -d evolution --clean --if-exists /backups/evolution_2026-09-24_0300.dump
+  docker compose run --rm -v central-whatsapp_media_data:/restaurar --entrypoint sh backup -c "tar xzf /backups/midias_2026-09-24_0300.tar.gz -C /restaurar"
+  docker compose up -d
+  ```
+
 ## Como atualizar (a cada nova fase)
 
 ```powershell
@@ -107,12 +149,15 @@ git pull
 docker compose up -d --build
 ```
 
-## API do backend (Fase 2)
+## API do backend
 
-Dá para abrir as rotas `GET` direto no navegador.
+Todas as rotas `/api` exigem login (cookie da sessão), menos `/api/auth/login`.
 
 | Rota | O que faz |
 |---|---|
+| `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/me` | Entrar, sair, quem sou eu |
+| `POST /api/auth/password` | Trocar a própria senha |
+| `GET/POST /api/users` · `PATCH /api/users/ID` · `POST /api/users/ID/reset-password` | Equipe (só administradores) |
 | `GET /api/instances` | Lista os números e o status de cada um |
 | `GET /api/conversations?tab=responderam` | Conversas em que o lead respondeu, da mais recente para a mais antiga |
 | `GET /api/conversations?tab=todas` | Todas as conversas (também aceita `&instanceId=1` para filtrar por número) |
@@ -136,6 +181,8 @@ Dá para abrir as rotas `GET` direto no navegador.
 | `docker compose logs -f evolution` | Acompanha os logs da Evolution |
 | `docker compose down` | Para tudo. **Os dados continuam salvos** |
 | `docker compose up -d` | Sobe tudo de novo |
+| `docker compose exec app node src/cli.ts listar-usuarios` | Lista os usuários |
+| `docker compose exec backup sh /backup.sh agora` | Faz um backup na hora |
 
 > ⚠️ **Nunca** rode `docker compose down -v`: o `-v` apaga os volumes, ou seja, o banco de dados, as mídias e as
 > sessões dos números. Seria preciso escanear todos os QR Codes de novo.

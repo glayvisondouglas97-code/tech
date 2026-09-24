@@ -100,6 +100,25 @@ services:
       # Áudios, imagens e documentos (os arquivos ficam aqui, não no banco).
       - media_data:/app/media
 
+  # Backup diário dos dois bancos e das mídias em ./backups (ver docker/backup/backup.sh).
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_HOUR: "03"
+      BACKUP_KEEP_DAYS: 7
+    volumes:
+      - ./docker/backup/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+      - media_data:/midias:ro
+
 volumes:
   postgres_data:
   redis_data:

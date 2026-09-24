@@ -70,11 +70,40 @@ model Message {
   mediaPath      String? // arquivo salvo no volume de mídias (relativo à pasta de mídias); null = ainda não baixado
   status         String? // PENDING | SERVER_ACK | DELIVERY_ACK | READ | PLAYED | ERROR
   sentAt         DateTime
+  sentByUserId   Int? // quem enviou pelo sistema (null = recebida ou enviada pelo celular)
   createdAt      DateTime @default(now())
 
   instance     Instance     @relation(fields: [instanceId], references: [id])
   conversation Conversation @relation(fields: [conversationId], references: [id])
+  sentBy       User?        @relation(fields: [sentByUserId], references: [id])
 
   @@unique([instanceId, waId])
   @@index([conversationId, sentAt])
+}
+
+// Pessoa da equipe com acesso ao sistema.
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique // sempre em minúsculas
+  passwordHash String
+  isAdmin      Boolean  @default(false) // pode gerenciar usuários
+  active       Boolean  @default(true) // desativado = não consegue entrar
+  createdAt    DateTime @default(now())
+
+  sessions Session[]
+  messages Message[]
+}
+
+// Login ativo. O navegador guarda só um código aleatório; aqui fica o hash dele.
+model Session {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

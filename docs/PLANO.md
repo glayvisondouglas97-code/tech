@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 a 5 concluídas e testadas pelo usuário. Fase 6 (mídia) entregue, aguardando teste.**
+Status: **Fases 1 a 6 concluídas e testadas pelo usuário. Fase 7 (login, backup e VPS) entregue, aguardando teste.**
 
 ## 1. Versão da Evolution API
 
@@ -113,7 +113,7 @@ Dependências previstas (mínimo):
 5. Tela de números: criar instância, QR Code, status, apelido e reconexão (o backend configura webhook e
    settings automaticamente).
 6. Mídia: gravar e enviar áudio (sem ffmpeg no backend), imagens e documentos, e ouvir e ver o que chegar.
-7. Login, backup (`pg_dump` dos 2 bancos e do volume de mídias), Caddy com HTTPS e deploy no VPS.
+7. Login (equipe com usuários e administradores), backup diário (`pg_dump` dos 2 bancos + mídias), Caddy com HTTPS e guia de deploy no VPS.
 
 ## 4.1 Como a Fase 2 funciona
 
@@ -173,6 +173,26 @@ por número em `backend/src/realtime.ts`.
   resto vai como documento, com o nome do arquivo. Limite de 25 MB por arquivo.
 - **Segurança**: só imagem, áudio e vídeo abrem dentro da página. Qualquer outro tipo (ex.: HTML ou SVG enviado por um
   lead) é sempre baixado, com `nosniff` e `sandbox`, para nunca rodar dentro do sistema.
+
+## 4.5 Como a Fase 7 (login, backup e VPS) funciona
+
+- **Login**: e-mail + senha. As senhas são guardadas com scrypt (nativo do Node). A sessão fica no banco (tabela
+  `Session`) e no navegador só vai um código aleatório, num cookie `HttpOnly` + `SameSite=Lax` (+ `Secure` no HTTPS).
+  "Sair", desativar ou redefinir a senha encerra a sessão na hora, inclusive o tempo real.
+- Todas as rotas `/api` e o Socket.io exigem login. O webhook continua protegido só pelo token (rede interna).
+- **Proteções**:
+  - pedidos que alteram dados só são aceitos do próprio site (conferência do `Origin`);
+  - 10 senhas erradas por e-mail (ou 30 por IP) bloqueiam o login por 15 minutos;
+  - a mensagem de erro de login é a mesma para e-mail inexistente e para senha errada;
+  - cabeçalhos de segurança (`X-Frame-Options`, `nosniff`, HSTS no Caddy).
+- **Usuários**: o primeiro administrador é criado pelo terminal (`node src/cli.ts criar-admin`). Administradores
+  criam o acesso da equipe na tela **Usuários** (senha provisória mostrada uma vez), redefinem senhas e desativam
+  acessos. Cada mensagem enviada pelo sistema guarda quem enviou (`sentByUserId`), o que prepara os relatórios e as
+  permissões por número (ideias futuras).
+- **Backup**: serviço `backup` (imagem do Postgres) que todo dia às 3h (Brasília) gera `pg_dump` dos bancos `evolution`
+  e `central` e um `.tar.gz` das mídias em `./backups`, mantendo 7 dias. A restauração foi testada.
+- **VPS**: `docker-compose.prod.yml` acrescenta o **Caddy** (HTTPS automático com Let's Encrypt) na frente do `app`,
+  bloqueando `/webhook` para a internet. Passo a passo em `docs/DEPLOY.md`.
 
 ## 5. Decisões tomadas
 

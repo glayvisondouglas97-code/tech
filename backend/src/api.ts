@@ -1,6 +1,8 @@
 // API usada pelo frontend: números, conversas, mensagens e envio de texto.
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { prisma } from './db.ts';
+import { usersRouter } from './accounts.ts';
+import { currentUser } from './auth.ts';
 import { evolution, EvolutionError } from './evolution.ts';
 import { conversationDto, instanceDto, messageDto } from './dto.ts';
 import type { Instance, Message, Prisma } from './generated/prisma/client.ts';
@@ -34,6 +36,7 @@ function parseLimit(value: unknown, fallback: number, max: number): number {
 
 export const apiRouter = Router();
 apiRouter.use(express.json({ limit: '1mb' }));
+apiRouter.use('/users', usersRouter);
 
 apiRouter.get('/instances', async (_req, res) => {
   const instances = await prisma.instance.findMany({ orderBy: { name: 'asc' } });
@@ -156,7 +159,9 @@ apiRouter.post('/conversations/:id/read', async (req, res) => {
 apiRouter.post('/conversations/:id/messages', async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) throw new HttpError(400, 'Mensagem vazia');
-  const message = await sendToConversation(parseId(req.params.id), (instance, number) => evolution.sendText(instance, number, text));
+  const message = await sendToConversation(parseId(req.params.id), currentUser(res).id, (instance, number) =>
+    evolution.sendText(instance, number, text),
+  );
   res.status(201).json(messageDto(message));
 });
 
@@ -175,6 +180,7 @@ apiRouter.post('/conversations/:id/audio', rawBody, async (req, res) => {
   if (!file.mime.startsWith('audio/')) throw new HttpError(400, 'Formato de áudio inválido');
   const message = await sendToConversation(
     parseId(req.params.id),
+    currentUser(res).id,
     (instance, number) => evolution.sendAudio(instance, number, file.data.toString('base64')),
     file,
   );
@@ -189,6 +195,7 @@ apiRouter.post('/conversations/:id/media', rawBody, async (req, res) => {
   const mediatype = /^image\/(jpeg|png|webp)$/.test(file.mime) ? 'image' : 'document';
   const message = await sendToConversation(
     parseId(req.params.id),
+    currentUser(res).id,
     (instance, number) =>
       evolution.sendMedia(instance, number, { mediatype, mimetype: file.mime, fileName, caption, base64: file.data.toString('base64') }),
     file,
@@ -220,6 +227,7 @@ apiRouter.get('/messages/:id/media', async (req, res) => {
 // no WhatsApp as mensagens do lead que foram respondidas.
 async function sendToConversation(
   conversationId: number,
+  userId: number,
   send: (instanceName: string, number: string) => Promise<WaMessage>,
   media?: { data: Buffer; mime: string },
 ): Promise<Message> {
@@ -254,6 +262,10 @@ async function sendToConversation(
       (await prisma.message.findUniqueOrThrow({
         where: { instanceId_waId: { instanceId: conversation.instanceId, waId: sent.key.id } },
       }));
+    // Registra quem da equipe enviou (para relatórios futuros).
+    if (message.sentByUserId !== userId) {
+      message = await prisma.message.update({ where: { id: message.id }, data: { sentByUserId: userId } });
+    }
     if (media) {
       message = await storeMedia(message, media.data, media.mime);
       stored?.resolve(message);

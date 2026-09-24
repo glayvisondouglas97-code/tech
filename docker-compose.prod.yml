@@ -1,0 +1,22 @@
+# Produção (VPS): acrescenta o Caddy na frente do sistema, com HTTPS automático no seu domínio.
+# No VPS, coloque no .env:  COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+# Assim, "docker compose up -d --build" já usa os dois arquivos. Passo a passo em docs/DEPLOY.md.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: "${DOMAIN:?defina DOMAIN no arquivo .env, por exemplo whats.suaempresa.com.br}"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
