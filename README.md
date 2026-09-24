@@ -145,6 +145,11 @@ novo. O apelido se troca no lápis ao lado do nome.
 - **Listas › Importar:** arraste o Excel/CSV. O sistema acha as colunas da empresa, do sócio e do telefone (dá para
   trocar cada uma), mostra o total de empresas e de telefones, quantos entram, quantos são repetidos e quantos são
   inválidos, e só grava quando você confirma. Depois dá para baixar as linhas recusadas com o motivo.
+- **Listas › Excluir e limpar:** o dono marca as caixinhas das listas (ou "selecionar todas") e clica em **Excluir
+  selecionadas**; para confirmar, digita **EXCLUIR**. Isso apaga os leads dessas listas e todo o histórico deles, sem
+  volta (para só tirar da fila, use **Arquivar** no menu **⋯**). Em **Importações recentes**, dono e administrador
+  removem uma importação pela lixeira ou tudo em **Limpar histórico**: some só o registro e as linhas recusadas; as
+  listas e os leads continuam.
 - **A chamar:** escolha quantos leads pegar e de qual DDD › **Pegar leads** (cada atendente tem um limite por dia),
   filtre a sua fila por DDD e chame (veja **Chamar um lead** abaixo). "Marcar como chamado" e "Sem WhatsApp" continuam
   para quem falou por outro meio. O **Modo foco** mostra um lead por vez, com atalhos de teclado (**W** chama).

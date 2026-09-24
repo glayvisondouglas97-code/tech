@@ -19,7 +19,7 @@ import { blockPhone, listBlocked, parsePhoneOrThrow, unblockPhone } from '../mod
 import { getDashboard } from '../modules/dashboard/service';
 import { countForExport, csvStream, xlsxBuffer } from '../modules/export/service';
 import { listFiltersSchema } from '../modules/leads/service';
-import { deleteList, listLists, renameList, setArchived } from '../modules/lists/service';
+import { deleteList, deleteLists, listLists, renameList, setArchived } from '../modules/lists/service';
 import {
   anonymizeSubject,
   deleteSubject,
@@ -102,6 +102,16 @@ export async function adminRoutes(app: FastifyInstance) {
     const { name } = parse(z.object({ name: z.string().trim().min(1).max(80) }), req.body);
     await renameList(db, user, idOf(req), name, req.ip);
     return { ok: true };
+  });
+
+  // Exclui várias listas de uma vez (só o dono), com a confirmação "EXCLUIR".
+  app.post('/lists/delete', async (req) => {
+    const user = requirePermission(req, 'deleteLists');
+    const { ids, confirm } = parse(
+      z.object({ ids: z.array(z.string().uuid()).min(1).max(200), confirm: z.string().max(100) }),
+      req.body,
+    );
+    return deleteLists(db, user, ids, confirm, req.ip);
   });
 
   app.post('/lists/:id/delete', async (req) => {

@@ -596,6 +596,34 @@ export async function discardImport(db: Db, id: string): Promise<void> {
   forgetTables(id);
 }
 
+/**
+ * Tira importações do histórico ("Importações recentes"): some o registro, o arquivo guardado e as linhas
+ * recusadas. As listas e os leads importados continuam. Importação em andamento não sai.
+ * Sem ids, limpa todas as que já terminaram.
+ */
+export async function clearImports(
+  db: Db,
+  user: AuthUser,
+  ids: string[] | undefined,
+  ip: string | null,
+): Promise<{ removed: number }> {
+  if (ids && !ids.length) return { removed: 0 };
+  let query = db.deleteFrom('imports').where('status', 'in', ['concluida', 'falhou', 'descartada']);
+  if (ids) query = query.where('id', 'in', ids);
+  const r = await query.executeTakeFirst();
+  const removed = Number(r.numDeletedRows);
+  if (removed > 0) {
+    await audit(db, {
+      userId: user.id,
+      action: 'limpou_importacoes',
+      entity: 'importacao',
+      details: { quantidade: removed, ...(ids ? {} : { tudo: true }) },
+      ip,
+    });
+  }
+  return { removed };
+}
+
 /** Importações que ficaram "processando" porque o servidor reiniciou no meio viram "falhou" (nada foi gravado). */
 export async function recoverStaleImports(db: Db, olderThanMinutes = 2): Promise<number> {
   return db.transaction().execute(async (trx) => {

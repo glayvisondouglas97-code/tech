@@ -5041,3 +5041,43 @@ dialog.dlg:has(.wa-qr-layout) {
   min-width: 0;
   max-width: 240px;
 }
+
+/* Listas: seleção para excluir várias de uma vez */
+.tbl .sel {
+  width: 1%;
+  padding-right: 0;
+}
+/* A primeira coluna da tabela tem largura mínima para o nome; com a caixinha, o nome vem logo depois. */
+.tbl td.sel {
+  min-width: 0;
+}
+.tbl td.sel + td {
+  min-width: 170px;
+  color: var(--ink);
+}
+.tbl .sel input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.tbl tr.selected td {
+  background: var(--surface-2);
+}
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--bad-soft);
+  font-size: 13.5px;
+}
+.bulk-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}

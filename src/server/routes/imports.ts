@@ -4,6 +4,7 @@ import { requirePermission } from '../http/auth-hooks';
 import { parse } from '../http/validation';
 import { badRequest } from '../lib/errors';
 import {
+  clearImports,
   commitImport,
   createDraft,
   discardImport,
@@ -70,6 +71,13 @@ export async function importRoutes(app: FastifyInstance) {
     requirePermission(req, 'importLists');
     await discardImport(db, idOf(req));
     return { ok: true };
+  });
+
+  // Limpa o histórico de importações (todas as terminadas, ou só as escolhidas). Listas e leads ficam.
+  app.post('/imports/clear', async (req) => {
+    const user = requirePermission(req, 'manageLists');
+    const { ids } = parse(z.object({ ids: z.array(z.string().uuid()).max(200).optional() }), req.body ?? {});
+    return clearImports(db, user, ids, req.ip);
   });
 
   app.get('/imports', async (req) => {

@@ -98,3 +98,48 @@ export async function deleteList(db: Db, user: AuthUser, id: string, confirm: st
     });
   });
 }
+
+/**
+ * Exclui várias listas de uma vez (com os leads e o histórico deles). Como pode apagar muita coisa,
+ * a confirmação é digitar EXCLUIR.
+ */
+export async function deleteLists(
+  db: Db,
+  user: AuthUser,
+  ids: string[],
+  confirm: string,
+  ip: string | null,
+): Promise<{ lists: number; leads: number }> {
+  if (normalizeText(confirm) !== 'excluir') throw badRequest('Para excluir, digite EXCLUIR.');
+  const unique = [...new Set(ids)];
+  return db.transaction().execute(async (trx) => {
+    const lists = await trx
+      .selectFrom('lists')
+      .select(['id', 'name'])
+      .where('id', 'in', unique)
+      .forUpdate()
+      .execute();
+    if (lists.length !== unique.length) {
+      throw notFound('Alguma lista não foi encontrada. Atualize a página e tente de novo.');
+    }
+    const counts = await trx
+      .selectFrom('leads')
+      .select(['list_id', sql<number>`count(*)`.as('n')])
+      .where('list_id', 'in', unique)
+      .groupBy('list_id')
+      .execute();
+    const leadsOf = new Map(counts.map((c) => [c.list_id, c.n]));
+    await trx.deleteFrom('lists').where('id', 'in', unique).execute();
+    for (const list of lists) {
+      await audit(trx, {
+        userId: user.id,
+        action: 'excluiu_lista',
+        entity: 'lista',
+        entityId: list.id,
+        details: { lista: list.name, leads: leadsOf.get(list.id) ?? 0 },
+        ip,
+      });
+    }
+    return { lists: lists.length, leads: counts.reduce((sum, c) => sum + c.n, 0) };
+  });
+}
