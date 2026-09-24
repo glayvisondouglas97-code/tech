@@ -120,9 +120,9 @@ export function ChatPanel({ conversationId, instances, onBack }: Props) {
     );
   }
 
-  // O status do número vem da lista de números, que é atualizada em tempo real.
-  const instanceStatus = instances.find((i) => i.id === conversation.instance.id)?.status ?? conversation.instance.status;
-  const disconnected = instanceStatus !== 'open';
+  // Apelido e status do número vêm da lista de números, que é atualizada em tempo real.
+  const instance = instances.find((i) => i.id === conversation.instance.id) ?? conversation.instance;
+  const disconnected = instance.status !== 'open';
 
   return (
     <main className="chat">
@@ -139,13 +139,13 @@ export function ChatPanel({ conversationId, instances, onBack }: Props) {
           title="A resposta sai por este número"
           style={{ '--instance-color': instanceColor(conversation.instance.id) } as React.CSSProperties}
         >
-          via {instanceLabel(conversation.instance)}
+          via {instanceLabel(instance)}
         </span>
       </header>
 
       {disconnected && (
         <div className="chat-warning">
-          ⚠ O número {instanceLabel(conversation.instance)} está desconectado. As respostas não serão enviadas até ele ser
+          ⚠ O número {instanceLabel(instance)} está desconectado. As respostas não serão enviadas até ele ser
           reconectado.
         </div>
       )}

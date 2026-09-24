@@ -64,21 +64,21 @@ docker compose logs -f app
 
 Aperte `Ctrl + C` para sair dos logs. Os serviços continuam rodando.
 
-### 4. Conectar um número
+### 4. Conectar os números
 
-1. Abra <http://localhost:8080/manager>.
-2. Preencha **URL do Servidor** (*Server URL*) com `http://localhost:8080` e **Chave de API Global**
-   (*API Key Global*) com a sua `EVOLUTION_API_KEY`.
-3. Clique em **Instância +**:
-   - **Nome** sem espaços, ex.: `whatsapp-01`;
-   - **Canal**: `Baileys`.
+1. Abra **<http://localhost:3100>** e clique em **Números**, no alto da lista de conversas.
+2. Digite um apelido (ex.: `WhatsApp 3 - João`) e clique em **+ Adicionar número**.
+3. O QR Code aparece na tela. No celular desse número, abra o WhatsApp → **Dispositivos conectados** →
+   **Conectar dispositivo** e escaneie. Ao conectar, a janela mostra "Conectado!" e fecha sozinha.
 
-   Depois clique em **Salvar**.
-4. Abra a instância, clique em **Gerar QR Code** e escaneie no celular: WhatsApp → **Dispositivos conectados**
-   → **Conectar dispositivo**.
+O sistema cria o número na Evolution já com o webhook, "ignorar grupos" ligado e "marcar como lida automaticamente"
+desligado. O histórico dos últimos 14 dias é importado sozinho logo depois da conexão.
 
-O backend configura sozinho, em cada número, o webhook, a opção de ignorar grupos e a opção de não marcar como lida
-automaticamente. **Não altere essas opções no painel da Evolution.** A Fase 5 vai trazer uma tela própria de números.
+**Número caiu?** O botão **Números** fica vermelho ("1 desconectado"). Na tela de números, clique em **Reconectar**:
+se a sessão ainda valer, ele volta sozinho; se não, aparece um QR Code novo.
+
+> O painel da Evolution (<http://localhost:8080/manager>) continua disponível para emergências, mas não é mais
+> necessário. Não altere nele as opções de webhook dos números.
 
 ## Usar o sistema
 
@@ -113,6 +113,9 @@ Dá para abrir as rotas `GET` direto no navegador.
 | `GET /api/conversations/ID/messages` | Mensagens de uma conversa |
 | `POST /api/conversations/ID/messages` | Envia texto (`{"text": "..."}`) pelo mesmo número da conversa |
 | `POST /api/conversations/ID/read` | Zera as não lidas no sistema (não manda tique azul) |
+| `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções |
+| `PATCH /api/instances/ID` | Troca o apelido de um número |
+| `POST /api/instances/ID/connect` | Conecta/reconecta um número (o QR Code chega em tempo real) |
 | `POST /api/instances/NOME/import-history` | Reimporta o histórico dos últimos 14 dias de um número |
 
 ## Comandos úteis

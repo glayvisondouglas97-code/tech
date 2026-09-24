@@ -54,9 +54,32 @@ textarea {
   padding: 16px 16px 8px;
 }
 
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .sidebar-header h1 {
   margin: 0;
   font-size: 1.3rem;
+}
+
+.numbers-button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.numbers-button.warn {
+  border-color: #f2b8b5;
+  background: #fde7e5;
+  color: var(--danger);
+  font-weight: 600;
 }
 
 .offline-banner {
@@ -442,6 +465,246 @@ textarea {
   cursor: default;
 }
 
+/* ---------- Botões e formulários comuns ---------- */
+.primary-button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button:disabled {
+  background: #9fd9c9;
+  cursor: default;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-dark);
+  cursor: pointer;
+}
+
+.form-error {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* ---------- Tela de números ---------- */
+.numbers-page {
+  max-width: 900px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.numbers-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.numbers-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.add-number {
+  display: flex;
+  gap: 8px;
+}
+
+.add-number input {
+  flex: 1 1 240px;
+}
+
+.add-number input,
+.rename input {
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.add-number button {
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.add-number button:disabled {
+  background: #9fd9c9;
+  cursor: default;
+}
+
+.number-list {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.number-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.number-row:last-child {
+  border-bottom: 0;
+}
+
+.number-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.number-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.number-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.number-title .link-button {
+  font-size: 0.8rem;
+}
+
+.number-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rename input {
+  flex: 1;
+}
+
+.rename button[type='submit'] {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.status-pill {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-pill.ok {
+  background: #e7f8f3;
+  color: var(--accent-dark);
+}
+
+.status-pill.wait {
+  background: var(--warning-bg);
+  color: #8a5a00;
+}
+
+.status-pill.off {
+  background: #fde7e5;
+  color: var(--danger);
+}
+
+/* ---------- Janela (QR Code) ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #0b141a80;
+}
+
+.modal {
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.modal-header .link-button {
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.qrcode {
+  display: block;
+  width: 264px;
+  max-width: 100%;
+  margin: 16px auto;
+  image-rendering: pixelated;
+}
+
+.qr-steps {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.modal-status {
+  margin: 24px 0 8px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.modal-status.ok {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
 /* ---------- Telas estreitas (celular): uma coluna por vez ---------- */
 @media (max-width: 768px) {
   .app {
@@ -463,5 +726,14 @@ textarea {
 
   .bubble {
     max-width: 85%;
+  }
+
+  .add-number,
+  .number-row {
+    flex-wrap: wrap;
+  }
+
+  .add-number button {
+    flex: 1;
   }
 }

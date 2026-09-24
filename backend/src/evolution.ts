@@ -69,34 +69,51 @@ export const WEBHOOK_EVENTS = [
   'QRCODE_UPDATED',
 ];
 
+// Webhook e opções que todo número usa. Aplicados ao criar o número e conferidos ao iniciar o backend.
+const webhookConfig = () => ({
+  enabled: true,
+  url: config.webhookUrl,
+  headers: { 'x-webhook-token': config.webhookToken },
+  byEvents: false,
+  base64: false,
+  events: WEBHOOK_EVENTS,
+});
+
+const SETTINGS = {
+  rejectCall: false,
+  msgCall: '',
+  groupsIgnore: true, // só conversas individuais
+  alwaysOnline: false,
+  readMessages: false, // tique azul só quando respondemos (decisão da Fase 0)
+  readStatus: false,
+  syncFullHistory: false,
+};
+
+// Resposta de /instance/connect: o QR Code (se já foi gerado) ou o estado, quando já está conectado.
+export type ConnectResponse = { base64?: string; count?: number; instance?: { state: string } };
+
 export const evolution = {
   fetchInstances: () => call<EvolutionInstance[]>('GET', '/instance/fetchInstances'),
 
   connectionState: (instance: string) =>
     call<{ instance: { instanceName: string; state: string } }>('GET', path('/instance/connectionState', instance)),
 
-  setWebhook: (instance: string) =>
-    call('POST', path('/webhook/set', instance), {
-      webhook: {
-        enabled: true,
-        url: config.webhookUrl,
-        headers: { 'x-webhook-token': config.webhookToken },
-        byEvents: false,
-        base64: false,
-        events: WEBHOOK_EVENTS,
-      },
+  // Cria o número já com webhook e opções, sem conectar (a conexão é pedida depois, na tela de números).
+  createInstance: (instance: string) =>
+    call('POST', '/instance/create', {
+      instanceName: instance,
+      integration: 'WHATSAPP-BAILEYS',
+      qrcode: false,
+      ...SETTINGS,
+      webhook: webhookConfig(),
     }),
 
-  setSettings: (instance: string) =>
-    call('POST', path('/settings/set', instance), {
-      rejectCall: false,
-      msgCall: '',
-      groupsIgnore: true, // só conversas individuais
-      alwaysOnline: false,
-      readMessages: false, // tique azul só quando respondemos (decisão da Fase 0)
-      readStatus: false,
-      syncFullHistory: false,
-    }),
+  // Conecta (ou reconecta) o número. Se precisar, a Evolution gera QR Codes e avisa pelo webhook QRCODE_UPDATED.
+  connect: (instance: string) => call<ConnectResponse>('GET', path('/instance/connect', instance)),
+
+  setWebhook: (instance: string) => call('POST', path('/webhook/set', instance), { webhook: webhookConfig() }),
+
+  setSettings: (instance: string) => call('POST', path('/settings/set', instance), SETTINGS),
 
   findMessages: (instance: string, since: Date, until: Date, page: number, pageSize: number) =>
     call<FindMessagesResponse>('POST', path('/chat/findMessages', instance), {

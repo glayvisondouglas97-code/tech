@@ -4,6 +4,7 @@ import { contactName, formatPhone, instanceColor, instanceLabel, listTime } from
 import { useOnline } from '../socket.ts';
 
 type Props = {
+  onOpenNumbers: () => void;
   tab: Tab;
   onTabChange: (tab: Tab) => void;
   instances: InstanceInfo[];
@@ -15,8 +16,11 @@ type Props = {
 };
 
 export function ConversationList(props: Props) {
-  const { tab, onTabChange, instances, instanceId, onInstanceChange, conversations, selectedId, onSelect } = props;
+  const { onOpenNumbers, tab, onTabChange, instances, instanceId, onInstanceChange, conversations, selectedId, onSelect } = props;
   const online = useOnline();
+  const disconnected = instances.filter((i) => i.status !== 'open').length;
+  // Apelido e cor vêm da lista de números (atualizada em tempo real), não da conversa.
+  const liveInstance = (i: { id: number; name: string; nickname: string | null }) => instances.find((x) => x.id === i.id) ?? i;
 
   const onScroll = (e: React.UIEvent<HTMLUListElement>) => {
     const el = e.currentTarget;
@@ -27,6 +31,9 @@ export function ConversationList(props: Props) {
     <aside className="sidebar">
       <header className="sidebar-header">
         <h1>Conversas</h1>
+        <button className={`numbers-button ${disconnected ? 'warn' : ''}`} onClick={onOpenNumbers}>
+          Números{disconnected > 0 && ` · ${disconnected} desconectado${disconnected > 1 ? 's' : ''}`}
+        </button>
       </header>
 
       {!online && (
@@ -80,7 +87,7 @@ export function ConversationList(props: Props) {
                     {c.unreadCount > 0 && <span className="unread-badge">{c.unreadCount}</span>}
                   </span>
                   <span className="instance-badge" style={{ '--instance-color': instanceColor(c.instance.id) } as React.CSSProperties}>
-                    {instanceLabel(c.instance)}
+                    {instanceLabel(liveInstance(c.instance))}
                   </span>
                 </span>
               </button>

@@ -61,6 +61,15 @@ export const api = {
 
   sendText: (id: number, text: string) =>
     request<ChatMessage>(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ text }) }),
+
+  createInstance: (nickname: string) =>
+    request<InstanceInfo>('/instances', { method: 'POST', body: JSON.stringify({ nickname }) }),
+
+  renameInstance: (id: number, nickname: string) =>
+    request<InstanceInfo>(`/instances/${id}`, { method: 'PATCH', body: JSON.stringify({ nickname }) }),
+
+  connectInstance: (id: number) =>
+    request<{ status: 'open' | 'connecting'; qrcode: string | null }>(`/instances/${id}/connect`, { method: 'POST' }),
 };
 
 // Junta duas listas de mensagens sem repetir (a mais nova vence) e em ordem cronológica.
@@ -73,6 +82,7 @@ export function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): 
 // Eventos de tempo real enviados pelo backend.
 export type MessageEvent = { conversationId: number; message: ChatMessage };
 export type ConversationRemovedEvent = { id: number; mergedInto: number };
+export type QrCodeEvent = { instanceId: number; qrcode: string | null };
 
 // Mesma ordem da lista: mais recente primeiro; empate pelo maior id.
 export function compareConversations(a: ConversationItem, b: ConversationItem): number {

@@ -10,12 +10,15 @@ import {
 } from './api.ts';
 import { ChatPanel } from './components/ChatPanel.tsx';
 import { ConversationList } from './components/ConversationList.tsx';
+import { NumbersPage } from './components/NumbersPage.tsx';
 import { useReconnect, useSocketEvent } from './socket.ts';
 
-// A conversa aberta fica no endereço (#12), então um F5 mantém o chat aberto.
+// O endereço guarda a tela: #numeros para a tela de números, #12 para a conversa 12 aberta (o F5 mantém).
+const pageFromHash = () => (window.location.hash === '#numeros' ? 'numeros' : 'conversas');
 const idFromHash = () => Number(window.location.hash.slice(1)) || null;
 
 export function App() {
+  const [page, setPage] = useState<'conversas' | 'numeros'>(pageFromHash);
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [tab, setTab] = useState<Tab>('responderam');
   const [instanceId, setInstanceId] = useState<number | null>(null);
@@ -27,13 +30,16 @@ export function App() {
     void loadInstances();
   }, [loadInstances]);
   useReconnect(loadInstances);
-  useSocketEvent<InstanceInfo>('instance:updated', (updated) =>
-    setInstances((prev) =>
-      prev.some((i) => i.id === updated.id)
-        ? prev.map((i) => (i.id === updated.id ? updated : i))
-        : [...prev, updated].sort((a, b) => a.name.localeCompare(b.name)),
-    ),
+  const saveInstance = useCallback(
+    (updated: InstanceInfo) =>
+      setInstances((prev) =>
+        prev.some((i) => i.id === updated.id)
+          ? prev.map((i) => (i.id === updated.id ? updated : i))
+          : [...prev, updated].sort((a, b) => a.name.localeCompare(b.name)),
+      ),
+    [],
   );
+  useSocketEvent<InstanceInfo>('instance:updated', saveInstance);
 
   // Se a conversa aberta foi juntada a outra (mesmo lead por telefone e @lid), abre a que ficou.
   useSocketEvent<ConversationRemovedEvent>('conversation:removed', ({ id, mergedInto }) =>
@@ -41,12 +47,18 @@ export function App() {
   );
 
   useEffect(() => {
-    window.history.replaceState(null, '', selectedId ? `#${selectedId}` : window.location.pathname);
-  }, [selectedId]);
+    const hash = page === 'numeros' ? '#numeros' : selectedId ? `#${selectedId}` : '';
+    window.history.replaceState(null, '', hash || window.location.pathname);
+  }, [page, selectedId]);
+
+  if (page === 'numeros') {
+    return <NumbersPage instances={instances} onInstanceSaved={saveInstance} onBack={() => setPage('conversas')} />;
+  }
 
   return (
     <div className={`app ${selectedId ? 'chat-open' : ''}`}>
       <ConversationList
+        onOpenNumbers={() => setPage('numeros')}
         tab={tab}
         onTabChange={setTab}
         instances={instances}

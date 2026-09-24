@@ -6,7 +6,8 @@ import { conversationDto, instanceDto, messageDto } from './dto.ts';
 import type { Instance, Prisma } from './generated/prisma/client.ts';
 import { importHistory } from './history.ts';
 import { enqueue } from './queue.ts';
-import { publishConversation } from './realtime.ts';
+import { nextInstanceName } from './instances.ts';
+import { publishConversation, publishInstance } from './realtime.ts';
 import { saveMessage, upsertInstance } from './store.ts';
 
 class HttpError extends Error {
@@ -35,6 +36,66 @@ apiRouter.use(express.json({ limit: '1mb' }));
 apiRouter.get('/instances', async (_req, res) => {
   const instances = await prisma.instance.findMany({ orderBy: { name: 'asc' } });
   res.json(instances.map(instanceDto));
+});
+
+function parseNickname(value: unknown): string | null {
+  if (value !== undefined && value !== null && typeof value !== 'string') throw new HttpError(400, 'Apelido inválido');
+  const nickname = (value ?? '').trim();
+  if (nickname.length > 60) throw new HttpError(400, 'Apelido muito longo (máximo 60 caracteres)');
+  return nickname || null;
+}
+
+// Cria um número novo na Evolution, já com webhook e opções. Depois a tela pede o QR Code.
+apiRouter.post('/instances', async (req, res) => {
+  const nickname = parseNickname(req.body?.nickname);
+  if (!nickname) throw new HttpError(400, 'Informe um apelido, ex.: "WhatsApp 3 - João"');
+  const name = await nextInstanceName();
+  try {
+    await evolution.createInstance(name);
+  } catch (error) {
+    if (error instanceof EvolutionError) {
+      console.error('[números]', error.message);
+      throw new HttpError(502, `Não foi possível criar o número: ${error.reason}`);
+    }
+    throw error;
+  }
+  await upsertInstance(name, { status: 'close' });
+  const instance = await prisma.instance.update({ where: { name }, data: { nickname } });
+  publishInstance(instance);
+  console.log(`[números] ${name} criado ("${nickname}")`);
+  res.status(201).json(instanceDto(instance));
+});
+
+// Troca o apelido exibido. Vazio volta a mostrar o nome técnico.
+apiRouter.patch('/instances/:id', async (req, res) => {
+  const id = parseId(req.params.id);
+  const nickname = parseNickname(req.body?.nickname);
+  if (!(await prisma.instance.findUnique({ where: { id } }))) throw new HttpError(404, 'Número não encontrado');
+  const instance = await prisma.instance.update({ where: { id }, data: { nickname } });
+  publishInstance(instance);
+  res.json(instanceDto(instance));
+});
+
+// Conecta ou reconecta um número. Se o WhatsApp pedir, os QR Codes chegam pelo tempo real (instance:qrcode).
+apiRouter.post('/instances/:id/connect', async (req, res) => {
+  const instance = await prisma.instance.findUnique({ where: { id: parseId(req.params.id) } });
+  if (!instance) throw new HttpError(404, 'Número não encontrado');
+  let result;
+  try {
+    result = await evolution.connect(instance.name);
+  } catch (error) {
+    if (error instanceof EvolutionError) {
+      console.error('[números]', error.message);
+      throw new HttpError(502, `Não foi possível conectar: ${error.reason}`);
+    }
+    throw error;
+  }
+  if (result.instance?.state === 'open') {
+    await upsertInstance(instance.name, { status: 'open' });
+    res.json({ status: 'open', qrcode: null });
+    return;
+  }
+  res.json({ status: 'connecting', qrcode: result.base64 ?? null });
 });
 
 // Lista de conversas, da mais recente para a mais antiga.

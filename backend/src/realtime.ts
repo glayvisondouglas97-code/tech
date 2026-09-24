@@ -34,3 +34,8 @@ export function publishInstance(instance: Instance): void {
 export function publishReload(): void {
   io?.emit('conversations:reload');
 }
+
+// Novo QR Code de um número (ou null quando o QR expirou e é preciso pedir outro).
+export function publishQrCode(instanceId: number, qrcode: string | null): void {
+  io?.emit('instance:qrcode', { instanceId, qrcode });
+}

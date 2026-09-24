@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 a 3 concluídas e testadas pelo usuário. Fase 4 (tempo real) entregue, aguardando teste.**
+Status: **Fases 1 a 4 concluídas e testadas pelo usuário. Fase 5 (tela de números) entregue, aguardando teste.**
 
 ## 1. Versão da Evolution API
 
@@ -144,10 +144,21 @@ O backend avisa todos os navegadores abertos por Socket.io, logo depois de grava
 | `conversation:removed` | duas conversas da mesma pessoa (telefone e @lid) foram juntadas |
 | `instance:updated` | um número conectou ou caiu |
 | `conversations:reload` | a importação de histórico terminou: a tela recarrega a lista |
+| `instance:qrcode` | novo QR Code de um número (ou `null` quando expirou), para a tela de números |
 
 Se a conexão cair, a tela mostra um aviso. O Socket.io reconecta sozinho e, ao voltar, a tela busca de novo a lista
 e o chat aberto. Hoje todos recebem tudo. Quando houver permissão por número (ideia futura), basta enviar para "salas"
 por número em `backend/src/realtime.ts`.
+
+## 4.3 Como a Fase 5 (tela de números) funciona
+
+- **Adicionar**: o backend escolhe o próximo nome livre (`whatsapp-NN`) e cria a instância na Evolution
+  (`POST /instance/create`), já com webhook e opções no mesmo pedido. Assim nenhum evento se perde antes da configuração.
+- **Conectar/Reconectar**: `GET /instance/connect/{instance}`. Se a sessão ainda vale, o número volta sem QR. Senão, a
+  Evolution gera QR Codes (troca a cada ~20s) e avisa por `QRCODE_UPDATED`, que o backend repassa para a tela. Depois
+  de 30 QR Codes sem leitura (`QRCODE_LIMIT`), a tela mostra "expirou" e oferece gerar outro.
+- **Apelido**: fica só no nosso banco e aparece na hora em todas as telas.
+- Não há botão de remover ou desconectar número no MVP. Se precisar, dá para fazer pelo painel da Evolution.
 
 ## 5. Decisões tomadas
 

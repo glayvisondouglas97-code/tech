@@ -15,6 +15,13 @@ export function instanceLabel(instance: { name: string; nickname: string | null 
   return instance.nickname || instance.name;
 }
 
+// Texto e cor do status de conexão de um número.
+export function statusInfo(status: string): { label: string; tone: 'ok' | 'wait' | 'off' } {
+  if (status === 'open') return { label: 'Conectado', tone: 'ok' };
+  if (status === 'connecting') return { label: 'Conectando…', tone: 'wait' };
+  return { label: 'Desconectado', tone: 'off' };
+}
+
 // Cor fixa por número, para diferenciar os WhatsApps na lista.
 const INSTANCE_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#65a30d'];
 export function instanceColor(id: number): string {

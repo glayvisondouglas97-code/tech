@@ -5,6 +5,7 @@ import { config } from './config.ts';
 import { prisma } from './db.ts';
 import { scheduleHistoryImport } from './history.ts';
 import { enqueue } from './queue.ts';
+import { publishQrCode } from './realtime.ts';
 import { saveMessage, updateMessageStatus, upsertInstance } from './store.ts';
 import type { WaMessage } from './whatsapp.ts';
 
@@ -59,8 +60,13 @@ async function handleEvent(event: string, instanceName: string, data: any): Prom
         if (before?.status !== data.state) console.log(`[conexão] ${instanceName}: ${data.state}`);
       }
       return;
+    case 'qrcode.updated': {
+      // Novo QR Code para a tela de números. Sem base64 = limite de QR Codes atingido (expirou).
+      const instance = await enqueue(() => upsertInstance(instanceName));
+      publishQrCode(instance.id, typeof data?.qrcode?.base64 === 'string' ? data.qrcode.base64 : null);
+      return;
+    }
     default:
-      // qrcode.updated: usado na Fase 5 (tela de números).
       return;
   }
 }
