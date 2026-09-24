@@ -1,0 +1,65 @@
+{
+  "name": "chamador-de-leads",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema para organizar a equipe que chama leads pelo WhatsApp",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "build": "vite build && tsup",
+    "start": "node dist/server/index.js",
+    "db:migrate": "tsx src/server/scripts/migrate.ts",
+    "criar-admin": "tsx src/server/scripts/create-admin.ts",
+    "seed": "tsx src/server/scripts/seed.ts",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run && playwright test",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/multipart": "^10.1.2",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/static": "^10.1.4",
+    "@fontsource/poppins": "^5.3.0",
+    "@node-rs/argon2": "^2.2.1",
+    "@tanstack/react-query": "^5.103.2",
+    "fastify": "^5.12.5",
+    "kysely": "^0.29.6",
+    "libphonenumber-js": "^1.13.13",
+    "pg": "^8.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^7.18.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.4",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  },
+  "allowScripts": {
+    "esbuild@0.27.7": true,
+    "esbuild@0.28.2": true,
+    "@embedded-postgres/windows-x64@18.4.0-beta.17": true
+  }
+}

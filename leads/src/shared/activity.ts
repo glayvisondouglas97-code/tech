@@ -1,0 +1,127 @@
+/** Nomes das ações registradas (auditoria), usados na tela e no CSV. */
+
+/** Ações sobre leads (histórico do lead). */
+export const LEAD_EVENT_LABELS: Record<string, string> = {
+  importado: 'Lead importado',
+  pegou: 'Pegou lead da fila',
+  atribuido: 'Lead atribuído',
+  abriu_whatsapp: 'Abriu o WhatsApp',
+  chamado: 'Marcou como chamado',
+  resultado: 'Mudou o resultado',
+  observacao: 'Escreveu observação',
+  desfeito: 'Desfez a marcação',
+  devolvido: 'Devolveu à fila livre',
+  expirado: 'Lead voltou sozinho para a fila',
+  retorno_agendado: 'Agendou retorno',
+  retorno_cancelado: 'Concluiu ou cancelou retorno',
+  bloqueado: 'Lead foi para "não contatar"',
+  desbloqueado: 'Lead saiu de "não contatar"',
+  whatsapp_resposta: 'Cliente respondeu pelo WhatsApp',
+  whatsapp_status: 'Status da mensagem no WhatsApp',
+  anonimizado: 'Dados anonimizados (LGPD)',
+};
+
+/** Ações do sistema (acessos, gestão, exportações). */
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  pediu_leads: 'Pediu leads da fila',
+  login: 'Entrou no sistema',
+  login_falhou: 'Tentativa de login com erro',
+  logout: 'Saiu do sistema',
+  acesso_negado: 'Tentou acessar algo sem permissão',
+  trocou_senha: 'Trocou a senha',
+  aceitou_convite: 'Aceitou o convite',
+  redefiniu_senha: 'Redefiniu a senha',
+  criou_primeiro_admin: 'Criou o primeiro dono',
+  senha_redefinida_por_comando: 'Senha redefinida pelo comando',
+  criou_usuario: 'Cadastrou pessoa',
+  alterou_usuario: 'Alterou pessoa',
+  desativou_usuario: 'Desativou pessoa',
+  reativou_usuario: 'Reativou pessoa',
+  gerou_link_senha: 'Gerou link de senha',
+  definiu_senha: 'Definiu a senha de alguém',
+  importou_lista: 'Importou lista',
+  arquivou_lista: 'Arquivou lista',
+  desarquivou_lista: 'Desarquivou lista',
+  renomeou_lista: 'Renomeou lista',
+  excluiu_lista: 'Excluiu lista',
+  exportou: 'Exportou planilha',
+  exportou_auditoria: 'Exportou a auditoria',
+  alterou_configuracoes: 'Alterou regras',
+  alterou_logo: 'Trocou o logo',
+  removeu_logo: 'Removeu o logo',
+  criou_mensagem: 'Criou mensagem pronta',
+  alterou_mensagem: 'Alterou mensagem pronta',
+  excluiu_mensagem: 'Excluiu mensagem pronta',
+  mensagem_padrao: 'Trocou a mensagem padrão',
+  bloqueou_numero: 'Bloqueou número',
+  desbloqueou_numero: 'Desbloqueou número',
+  consultou_titular: 'Consultou dados de titular',
+  exportou_dados_titular: 'Exportou dados de titular',
+  anonimizou_titular: 'Anonimizou titular',
+  excluiu_titular: 'Excluiu titular',
+};
+
+export function actionLabel(action: string): string {
+  return LEAD_EVENT_LABELS[action] ?? AUDIT_ACTION_LABELS[action] ?? action;
+}
+
+/** Filtros da auditoria: cada categoria junta várias ações. */
+export const ACTIVITY_CATEGORIES = {
+  pedidos: { label: 'Pedidos de leads', actions: ['pediu_leads', 'pegou'] },
+  atribuicoes: { label: 'Leads distribuídos / atribuídos', actions: ['importado', 'atribuido'] },
+  whatsapp: { label: 'WhatsApp aberto', actions: ['abriu_whatsapp'] },
+  contatos: {
+    label: 'Chamados e resultados',
+    actions: ['chamado', 'resultado', 'observacao', 'retorno_agendado', 'retorno_cancelado'],
+  },
+  devolucoes: { label: 'Desfazer e devolver', actions: ['desfeito', 'devolvido', 'expirado'] },
+  bloqueios: {
+    label: 'Não contatar',
+    actions: ['bloqueado', 'desbloqueado', 'bloqueou_numero', 'desbloqueou_numero'],
+  },
+  acessos: {
+    label: 'Acessos e senhas',
+    actions: [
+      'login',
+      'login_falhou',
+      'logout',
+      'acesso_negado',
+      'trocou_senha',
+      'aceitou_convite',
+      'redefiniu_senha',
+    ],
+  },
+  gestao: {
+    label: 'Gestão (equipe, listas, configurações, exportações)',
+    actions: [
+      'criou_primeiro_admin',
+      'senha_redefinida_por_comando',
+      'criou_usuario',
+      'alterou_usuario',
+      'desativou_usuario',
+      'reativou_usuario',
+      'gerou_link_senha',
+      'definiu_senha',
+      'importou_lista',
+      'arquivou_lista',
+      'desarquivou_lista',
+      'renomeou_lista',
+      'excluiu_lista',
+      'exportou',
+      'exportou_auditoria',
+      'alterou_configuracoes',
+      'alterou_logo',
+      'removeu_logo',
+      'criou_mensagem',
+      'alterou_mensagem',
+      'excluiu_mensagem',
+      'mensagem_padrao',
+      'consultou_titular',
+      'exportou_dados_titular',
+      'anonimizou_titular',
+      'excluiu_titular',
+    ],
+  },
+} as const;
+
+export type ActivityCategory = keyof typeof ACTIVITY_CATEGORIES;

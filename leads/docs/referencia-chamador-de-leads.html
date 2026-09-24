@@ -1,0 +1,1422 @@
+<title>Chamador de Leads</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=IBM+Plex+Mono:wght@500&family=Schibsted+Grotesk:wght@600..800&display=swap">
+<style>
+:root{
+  --bg:#EDF1EF; --surface:#FFFFFF; --surface-2:#F5F8F6; --sunk:#E4EAE7;
+  --ink:#14201B; --ink-2:#46544D; --muted:#6B7972; --line:#D6DED9; --line-2:#E6ECE8;
+  --accent:#2E44C9; --accent-hover:#2438AF; --accent-ink:#FFFFFF; --accent-soft:#E5E9FB;
+  --wa:#0F8246; --wa-hover:#0B6E3B; --wa-ink:#FFFFFF;
+  --ok:#11703D; --ok-soft:#DAF1E3; --warn:#8F5400; --warn-soft:#FDEDCD;
+  --bad:#AE2417; --bad-soft:#FBE4E0; --info:#2E44C9; --info-soft:#E5E9FB; --mute-soft:#E7ECE9;
+  --shadow:0 1px 2px rgba(20,32,27,.05), 0 6px 20px -8px rgba(20,32,27,.12);
+  --ring:0 0 0 3px rgba(46,68,201,.28);
+  --f-display:"Schibsted Grotesk","Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-body:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0D1311; --surface:#141C19; --surface-2:#19231F; --sunk:#0A0F0D;
+    --ink:#E3ECE7; --ink-2:#A8B6AF; --muted:#7E8C85; --line:#28342F; --line-2:#1F2925;
+    --accent:#93A1FF; --accent-hover:#AAB5FF; --accent-ink:#0D1311; --accent-soft:#1F2650;
+    --wa:#27A862; --wa-hover:#31BD6F; --wa-ink:#03130A;
+    --ok:#62CF91; --ok-soft:#153323; --warn:#F2B55A; --warn-soft:#382A10;
+    --bad:#FF8C7C; --bad-soft:#3A1915; --info:#93A1FF; --info-soft:#1F2650; --mute-soft:#212B27;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -10px rgba(0,0,0,.6);
+    --ring:0 0 0 3px rgba(147,161,255,.35);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0D1311; --surface:#141C19; --surface-2:#19231F; --sunk:#0A0F0D;
+  --ink:#E3ECE7; --ink-2:#A8B6AF; --muted:#7E8C85; --line:#28342F; --line-2:#1F2925;
+  --accent:#93A1FF; --accent-hover:#AAB5FF; --accent-ink:#0D1311; --accent-soft:#1F2650;
+  --wa:#27A862; --wa-hover:#31BD6F; --wa-ink:#03130A;
+  --ok:#62CF91; --ok-soft:#153323; --warn:#F2B55A; --warn-soft:#382A10;
+  --bad:#FF8C7C; --bad-soft:#3A1915; --info:#93A1FF; --info-soft:#1F2650; --mute-soft:#212B27;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -10px rgba(0,0,0,.6);
+  --ring:0 0 0 3px rgba(147,161,255,.35);
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);letter-spacing:-.01em;text-wrap:balance;margin:0}
+h1{font-size:26px;font-weight:800;line-height:1.15}
+h2{font-size:18px;font-weight:700;line-height:1.25}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+:focus-visible{outline:none;box-shadow:var(--ring);border-radius:8px}
+.num,.phone{font-variant-numeric:tabular-nums}
+.phone{font-family:var(--f-mono);font-size:13.5px;letter-spacing:-.01em;color:var(--ink-2)}
+.sub{color:var(--muted);font-size:14px}
+.eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- top bar ---------- */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1120px;margin:0 auto;padding:0 20px;display:flex;align-items:center;gap:8px 24px;flex-wrap:wrap;min-height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:800;font-size:17px;letter-spacing:-.015em;white-space:nowrap}
+.brand svg{flex:none}
+.tabs{display:flex;gap:4px;align-self:stretch;flex:1 1 auto}
+.tab{appearance:none;background:none;border:0;padding:0 12px;cursor:pointer;font-weight:600;font-size:14.5px;color:var(--muted);display:flex;align-items:center;gap:7px;border-bottom:2.5px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab-count{font-size:12px;font-weight:700;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accent);color:var(--accent-ink);display:inline-grid;place-items:center}
+.tab-count:empty{display:none}
+.me-pill{appearance:none;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;height:36px;padding:0 12px 0 4px;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:14px;white-space:nowrap}
+.me-pill:hover{border-color:var(--muted)}
+.me-pill .sub{font-weight:500;font-size:13px}
+.avatar{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--accent-soft);color:var(--accent);flex:none}
+.avatar.lg{width:40px;height:40px;font-size:15px}
+.avatar.empty{background:var(--mute-soft);color:var(--muted)}
+@media (max-width:760px){
+  .bar-in{padding:8px 16px 0;gap:6px 12px}
+  .brand{flex:1}
+  .tabs{order:3;flex:1 1 100%;overflow-x:auto;scrollbar-width:none;min-height:44px}
+  .tab{padding:0 10px}
+}
+
+/* ---------- page ---------- */
+main{max-width:1120px;margin:0 auto;padding:24px 20px 96px}
+@media (max-width:760px){main{padding:18px 16px 96px}}
+.stack{display:flex;flex-direction:column;gap:20px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
+.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 20px;flex-wrap:wrap}
+.banner{max-width:1120px;margin:16px auto 0;padding:0 20px}
+.banner>div{background:var(--warn-soft);color:var(--ink);border-radius:10px;padding:12px 16px;font-size:14px}
+@media (max-width:760px){.banner{padding:0 16px}}
+
+/* ---------- buttons & inputs ---------- */
+.btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:10px;border:1px solid transparent;font-weight:650;font-size:14px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+.btn svg{flex:none}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-primary:not([disabled]):hover{background:var(--accent-hover)}
+.btn-wa{background:var(--wa);color:var(--wa-ink)}
+.btn-wa:hover{background:var(--wa-hover)}
+.btn-line{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.btn-line:not([disabled]):hover{border-color:var(--ink-2)}
+.btn-ghost{background:transparent;color:var(--muted);padding:0 10px}
+.btn-ghost:not([disabled]):hover{color:var(--ink);background:var(--surface-2)}
+.btn-danger{background:var(--bad);color:var(--surface)}
+.btn-sm{height:32px;padding:0 11px;font-size:13px;border-radius:8px}
+.link-btn{appearance:none;background:none;border:0;padding:0;color:var(--accent);font-weight:600;cursor:pointer;font-size:inherit}
+.input,.select,textarea.input{height:40px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:0 12px;font-size:14.5px;width:100%;min-width:0}
+textarea.input{height:auto;padding:10px 12px;line-height:1.5;resize:vertical}
+.input:focus,.select:focus{outline:none;border-color:var(--accent);box-shadow:var(--ring)}
+.field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--ink-2);min-width:0}
+.field small{font-weight:500;color:var(--muted)}
+.check{display:flex;align-items:flex-start;gap:9px;font-size:14px;cursor:pointer}
+.check input{margin:3px 0 0;width:16px;height:16px;accent-color:var(--accent);flex:none}
+.check small{display:block;color:var(--muted);font-size:13px}
+
+/* ---------- attendant desk ---------- */
+.desk-head{display:grid;grid-template-columns:1fr auto;gap:18px 28px;align-items:end;margin-bottom:18px}
+.desk-head h1{display:flex;align-items:center;gap:12px}
+.tally{display:flex;gap:26px;flex-wrap:wrap}
+.tally div{display:flex;flex-direction:column}
+.tally b{font-family:var(--f-display);font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.tally span{font-size:12.5px;color:var(--muted);font-weight:500}
+.desk-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:760px){.desk-head{grid-template-columns:1fr}.desk-actions{justify-content:flex-start}}
+.toolbar{display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.toolbar .search{flex:1 1 240px;max-width:380px}
+.toolbar .prefs{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-left:auto;font-size:13.5px;color:var(--ink-2)}
+.toolbar .prefs .select{width:auto;height:34px;font-size:13.5px}
+.search{position:relative}
+.search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.search .input{padding-left:36px}
+
+.leads{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.lead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 20px;align-items:center;padding:14px 18px;border-top:1px solid var(--line-2)}
+.lead:first-child{border-top:0}
+.lead-name{font-weight:650;font-size:15.5px;line-height:1.3;overflow-wrap:anywhere}
+.lead-meta{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin-top:3px;font-size:13px;color:var(--muted)}
+.lead-meta .x b{font-weight:600;color:var(--ink-2)}
+.tag{font-size:12px;font-weight:600;color:var(--ink-2);background:var(--mute-soft);padding:1px 8px;border-radius:6px}
+.lead-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.lead.opened{background:linear-gradient(90deg,var(--accent-soft),transparent 60%)}
+.lead.opened .btn-done{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.opened-note{font-size:12.5px;color:var(--accent);font-weight:600}
+@media (max-width:760px){
+  .lead{grid-template-columns:1fr;padding:14px 16px}
+  .lead-act{justify-content:stretch}
+  .lead-act .btn-wa,.lead-act .btn-done{flex:1 1 45%}
+}
+.more{display:flex;justify-content:center;padding:14px}
+.empty{padding:44px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.empty h2{font-size:19px}
+.empty p{color:var(--muted);max-width:44ch}
+.skel{height:64px;border-top:1px solid var(--line-2);background:linear-gradient(90deg,transparent,var(--surface-2),transparent);background-size:200% 100%;animation:sk 1.2s linear infinite}
+.skel:first-child{border-top:0}
+@keyframes sk{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
+
+/* chooser & onboarding */
+.chooser{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:16px}
+.chooser button{appearance:none;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;font-weight:650;font-size:15px;text-align:left}
+.chooser button:hover{border-color:var(--accent);background:var(--accent-soft)}
+.chooser button[aria-pressed="true"]{border-color:var(--accent)}
+.steps{list-style:none;margin:16px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.steps li{border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px;background:var(--surface-2)}
+.steps li.done{background:var(--ok-soft);border-color:transparent}
+.steps .n{font-family:var(--f-display);font-weight:800;font-size:13px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--surface);border:1px solid var(--line)}
+.steps li.done .n{background:var(--ok);color:var(--surface);border-color:transparent}
+.steps h3{font-size:15.5px}
+.steps p{font-size:13.5px;color:var(--ink-2)}
+.steps .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:4px}
+@media (max-width:860px){.steps{grid-template-columns:1fr}}
+
+/* ---------- called list ---------- */
+.filters{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:10px;margin:16px 0 12px}
+@media (max-width:760px){.filters{grid-template-columns:1fr 1fr}.filters .search{grid-column:1/-1}}
+.crow{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 190px auto;gap:10px 18px;align-items:center;padding:13px 18px;border-top:1px solid var(--line-2)}
+.crow:first-child{border-top:0}
+.who{display:flex;align-items:center;gap:10px;min-width:0}
+.who .nm{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who .when{font-size:12.5px;color:var(--muted)}
+.crow-act{display:flex;gap:4px;justify-content:flex-end}
+.note-text{font-size:13.5px;color:var(--ink-2);margin-top:6px;padding-left:10px;border-left:2px solid var(--line);overflow-wrap:anywhere;white-space:pre-wrap}
+.note-edit{grid-column:1/-1;display:flex;flex-direction:column;gap:8px}
+.note-edit .row{display:flex;gap:8px;justify-content:flex-end}
+@media (max-width:860px){
+  .crow{grid-template-columns:1fr auto;padding:14px 16px}
+  .crow>div:first-child{grid-column:1/-1}
+  .crow .who{grid-column:1}
+  .crow .res{grid-column:2;grid-row:2}
+  .crow-act{grid-column:1/-1;justify-content:flex-start}
+}
+.icon-btn{appearance:none;width:34px;height:34px;display:inline-grid;place-items:center;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer;text-decoration:none}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+.icon-btn.wa:hover{color:var(--wa)}
+
+/* result pill */
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:650;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.res-select{appearance:none;-webkit-appearance:none;border:0;height:32px;border-radius:999px;padding:0 30px 0 12px;font-size:13px;font-weight:650;cursor:pointer;width:100%;max-width:190px;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 15px) 14px,calc(100% - 10px) 14px;background-size:5px 5px;background-repeat:no-repeat}
+.res-select:focus{outline:none;box-shadow:var(--ring)}
+.t-neutral{background-color:var(--mute-soft);color:var(--ink-2)}
+.t-info{background-color:var(--info-soft);color:var(--info)}
+.t-warn{background-color:var(--warn-soft);color:var(--warn)}
+.t-ok{background-color:var(--ok-soft);color:var(--ok)}
+.t-mute{background-color:var(--mute-soft);color:var(--muted)}
+.t-bad{background-color:var(--bad-soft);color:var(--bad)}
+.res-select option{background:var(--surface);color:var(--ink)}
+
+/* ---------- dashboard ---------- */
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.tile .v{font-family:var(--f-display);font-size:32px;font-weight:800;line-height:1.1;margin-top:6px;font-variant-numeric:tabular-nums}
+.tile .s{font-size:13px;color:var(--muted);margin-top:2px}
+@media (max-width:860px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.meter{height:12px;border-radius:6px;background:var(--sunk);overflow:hidden;display:flex;gap:2px}
+.meter i{display:block;height:100%}
+.meter .m-done{background:var(--accent);border-radius:6px 0 0 6px}
+.meter .m-held{background:var(--accent);opacity:.35}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--ink-2);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:10px;height:10px;border-radius:3px;background:var(--accent);display:inline-block}
+.legend i.h{opacity:.35}
+.legend i.f{background:var(--sunk);border:1px solid var(--line)}
+.tbl-wrap{overflow-x:auto;margin:0 -4px}
+table.tbl{width:100%;border-collapse:collapse;font-size:14px;min-width:620px}
+.tbl th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--muted);text-align:right;padding:8px 10px;border-bottom:1px solid var(--line)}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl td{padding:11px 10px;border-bottom:1px solid var(--line-2);text-align:right;font-variant-numeric:tabular-nums}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .bar-cell{width:30%;min-width:140px}
+.hbar{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+.hbar .track{flex:1;height:8px;border-radius:4px;background:var(--sunk);overflow:hidden}
+.hbar .track i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.hbar b{min-width:28px;text-align:right}
+.res-sum{display:flex;flex-wrap:wrap;gap:8px}
+.res-sum .pill{font-size:13.5px;padding:6px 12px}
+.res-sum .pill b{font-variant-numeric:tabular-nums}
+
+/* ---------- settings ---------- */
+.cfg-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.cfg-grid{grid-template-columns:1fr}}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;border:1.5px dashed var(--line);border-radius:12px;padding:34px 16px;background:var(--surface-2);cursor:pointer;transition:border-color .12s,background .12s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop strong{font-size:15.5px}
+.drop .sub{font-size:13.5px}
+details.paste{margin-top:12px}
+details.paste summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--accent)}
+details.paste textarea{margin-top:10px;font-family:var(--f-mono);font-size:13px}
+.imp-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+@media (max-width:860px){.imp-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:480px){.imp-grid{grid-template-columns:1fr}}
+.imp-file{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--surface-2);border-radius:10px;font-size:14px}
+.imp-opts{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+fieldset.dist{border:1px solid var(--line);border-radius:12px;padding:12px 16px 14px;margin:6px 0 0;display:flex;flex-direction:column;gap:10px}
+fieldset.dist legend{font-size:13px;font-weight:700;color:var(--ink-2);padding:0 6px}
+.dist-to{display:flex;flex-wrap:wrap;gap:8px 16px;padding-left:25px}
+.imp-sum{margin-top:18px;display:flex;flex-direction:column;gap:14px}
+.imp-count{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:5px 10px;border-radius:8px;background:var(--mute-soft);color:var(--ink-2)}
+.chip.good{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.prev-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table.prev{border-collapse:collapse;width:100%;font-size:13.5px;min-width:460px}
+.prev th{text-align:left;font-size:12px;font-weight:700;color:var(--muted);padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.prev td{padding:8px 12px;border-bottom:1px solid var(--line-2)}
+.prev tr:last-child td{border-bottom:0}
+.progress{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .2s}
+.inline-form{display:flex;gap:8px;margin-top:4px}
+.team{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column}
+.team li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line-2);flex-wrap:wrap}
+.team li:first-child{border-top:0}
+.team .t-main{flex:1 1 140px;min-width:0}
+.team .t-main b{display:block;font-weight:650}
+.team .t-main span{font-size:13px;color:var(--muted)}
+.team .t-act{display:flex;gap:6px;flex-wrap:wrap}
+.confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;font-weight:600;color:var(--bad)}
+.note{font-size:13.5px;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-top:14px}
+.note b{color:var(--ink)}
+.vars{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;font-size:13px;color:var(--muted)}
+.vars button{appearance:none;border:1px solid var(--line);background:var(--surface-2);border-radius:6px;padding:3px 8px;font-family:var(--f-mono);font-size:12.5px;cursor:pointer;color:var(--ink-2)}
+.vars button:hover{border-color:var(--accent);color:var(--accent)}
+.bubble{margin-top:14px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:4px 14px 14px 14px;padding:12px 14px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:46ch}
+.lists-tbl td .progress{width:100%;min-width:90px}
+
+/* ---------- toasts ---------- */
+.toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(520px,calc(100% - 32px));pointer-events:none}
+.toast{pointer-events:auto;display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--bg);padding:11px 12px 11px 16px;border-radius:12px;font-size:14px;font-weight:500;box-shadow:var(--shadow);max-width:100%}
+.toast.bad{background:var(--bad);color:var(--surface)}
+.toast button{appearance:none;border:0;background:transparent;color:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:4px 6px;white-space:nowrap}
+</style>
+
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" style="fill:var(--accent)"/><g style="fill:var(--accent-ink)"><rect x="7" y="8" width="9" height="2.6" rx="1.3"/><rect x="7" y="12.7" width="7" height="2.6" rx="1.3" opacity=".7"/><rect x="7" y="17.4" width="5" height="2.6" rx="1.3" opacity=".45"/></g><path d="M15.6 17.2l2.4 2.4 4.4-5" fill="none" style="stroke:var(--accent-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Chamador de Leads</span>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Seções"></nav>
+    <button class="me-pill" id="me-pill" data-action="choose-me" hidden></button>
+  </div>
+</header>
+<div class="banner" id="banner" hidden></div>
+<main id="view"></main>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= helpers ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const rid = (n = 8) => { const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; let s = ''; for (const x of crypto.getRandomValues(new Uint8Array(n))) s += a[x % 36]; return s; };
+const DAY = 864e5;
+const startOfDay = t => { const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); };
+const nf = new Intl.NumberFormat('pt-BR');
+const fmtN = n => nf.format(n || 0);
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const initials = name => { const p = String(name || '').trim().split(/\s+/).filter(Boolean); if (!p.length) return '?'; return ((p[0][0] || '') + (p.length > 1 ? p[p.length-1][0] : '')).toUpperCase(); };
+const colLetter = i => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+
+function fmtPhone(d) {
+  d = String(d || '');
+  if (d.startsWith('55') && (d.length === 12 || d.length === 13)) {
+    const ddd = d.slice(2, 4), n = d.slice(4);
+    return `+55 (${ddd}) ${n.slice(0, n.length - 4)}-${n.slice(-4)}`;
+  }
+  return d ? '+' + d : '';
+}
+function fmtWhen(t) {
+  if (!t) return '';
+  const d = new Date(t), today = startOfDay(Date.now());
+  const hm = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (t >= today) return 'hoje, ' + hm;
+  if (t >= today - DAY) return 'ontem, ' + hm;
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ', ' + hm;
+}
+function fmtDate(t) { return t ? new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''; }
+
+function isPhoneLike(v) {
+  const s = String(v ?? ''); const d = s.replace(/\D/g, '');
+  return d.length >= 8 && d.length <= 15 && !/[a-z]{3,}/i.test(s) && !s.includes('@');
+}
+function normalizePhone(raw, ddd) {
+  const parts = String(raw ?? '').split(/[\/,;|]| ou /i);
+  for (const part of parts) {
+    let d = part.replace(/\D/g, '');
+    if (!d) continue;
+    if (d.startsWith('00')) d = d.slice(2);
+    d = d.replace(/^0+/, '');
+    if ((d.length === 8 || d.length === 9) && ddd) d = ddd + d;
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    if (d.length >= 12 && d.length <= 15) return d;
+  }
+  return null;
+}
+
+const ICON = {
+  chat: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M8.5 9.5h7M8.5 12.5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  check: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  search: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  undo: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7L4.5 11.5 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11.5h9a5 5 0 0 1 0 10h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  note: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 12h7M8.5 16h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  down: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  file: '<svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v4h4M9 12h6M9 15h6M9 18h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+};
+
+const RESULTS = [
+  { id: 'enviado',       label: 'Mensagem enviada', tone: 'neutral' },
+  { id: 'respondeu',     label: 'Respondeu',        tone: 'info' },
+  { id: 'interessado',   label: 'Interessado',      tone: 'warn' },
+  { id: 'fechou',        label: 'Fechou negócio',   tone: 'ok' },
+  { id: 'sem_interesse', label: 'Sem interesse',    tone: 'mute' },
+  { id: 'invalido',      label: 'Sem WhatsApp',     tone: 'bad' }
+];
+const RES = Object.fromEntries(RESULTS.map(r => [r.id, r]));
+const resOf = id => RES[id] || RES.enviado;
+
+const DEFAULT_TEMPLATE = 'Olá, {nome}! Tudo bem? Aqui é {atendente}. Vi que você demonstrou interesse e queria te passar mais informações. Posso te ajudar?';
+const TABS = [
+  { id: 'chamar', label: 'A chamar' },
+  { id: 'chamados', label: 'Já chamados' },
+  { id: 'painel', label: 'Painel' },
+  { id: 'config', label: 'Configurar', owner: true }
+];
+
+/* ================= state ================= */
+const S = {
+  db: null, user: null, dl: null, uid: null, isOwner: false, readonly: false, fatal: null,
+  ready: { config: false, lists: false, batches: false },
+  configExists: false, config: { attendants: {}, template: DEFAULT_TEMPLATE },
+  lists: {}, chunks: {}, leads: [], byKey: new Map(),
+  me: LS.get('cl_me', null),
+  tab: (() => { const h = location.hash.slice(1); if (TABS.some(t => t.id === h)) return h; return LS.get('cl_tab', 'chamar'); })(),
+  prefs: Object.assign({ open: matchMedia('(pointer:coarse)').matches ? 'app' : 'web', msg: true }, LS.get('cl_prefs', {})),
+  q: { pend: '', called: '' }, f: { att: 'all', res: 'all', period: '7' },
+  limit: { pend: 150, called: 100 },
+  choosing: false, pulling: false, confirm: null, editNote: null,
+  imp: null, impBusy: null, tplDirty: false, attSig: '',
+  tabId: rid(10)
+};
+const allReady = () => S.ready.config && S.ready.lists && S.ready.batches;
+
+const attList = () => Object.entries(S.config.attendants || {}).map(([id, a]) => ({ id, ...a })).sort((a, b) => (a.c || 0) - (b.c || 0));
+const activeAtts = () => attList().filter(a => a.active !== false);
+const attName = id => (id && S.config.attendants?.[id]?.name) || (id ? 'Atendente removido' : '—');
+const listNameOf = l => S.lists[l.list]?.name || l.listName || 'Lista';
+
+function rebuild() {
+  const out = [], map = new Map();
+  for (const [cid, c] of Object.entries(S.chunks)) {
+    const L = (c && c.leads) || {};
+    for (const [id, l] of Object.entries(L)) {
+      if (!l || typeof l !== 'object') continue;
+      const lead = { ...l, k: cid + '|' + id, id, chunk: cid, list: c.list, listName: c.listName };
+      out.push(lead); map.set(lead.k, lead);
+    }
+  }
+  S.leads = out; S.byKey = map;
+}
+
+/* ================= writes ================= */
+const queues = new Map();
+function enqueue(path, fn) {
+  const prev = queues.get(path) || Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  queues.set(path, next);
+  return next;
+}
+async function withRetry(fn) {
+  try { return await fn(); }
+  catch (e) { if (e && e.code === 'unavailable') { await sleep(400 + Math.random() * 600); return fn(); } throw e; }
+}
+function write(path, op, data) {
+  return enqueue(path, () => withRetry(() => { const ref = S.db.doc(path); return op === 'delete' ? ref.delete() : ref[op](data); }));
+}
+function patchLead(lead, fields) {
+  return write('batches/' + lead.chunk, 'update', { leads: { [lead.id]: fields } });
+}
+function writeConfig(patch) {
+  return enqueue('config/main', () => withRetry(async () => {
+    const ref = S.db.doc('config/main');
+    if (S.configExists) return ref.update(patch);
+    const full = { attendants: {}, template: S.config.template || DEFAULT_TEMPLATE, ...patch };
+    await ref.set(full); S.configExists = true;
+  }));
+}
+function errMsg(e) {
+  const c = e && e.code;
+  if (c === 'invalid_argument') return 'Sem permissão para alterar isso. Peça ao gestor acesso de edição.';
+  if (c === 'quota_exceeded') return 'O banco de dados chegou no limite. Exclua listas antigas em Configurar.';
+  if (c === 'resource_exhausted') return 'Muitas ações seguidas. Espere alguns segundos e tente de novo.';
+  if (c === 'revoked') return 'Seu acesso a esta página mudou. Recarregue a página.';
+  return 'Não foi possível salvar agora. Confira a internet e tente de novo.';
+}
+
+/* ================= toasts ================= */
+function toast(msg, opts = {}) {
+  const box = $('#toasts'); const el = document.createElement('div');
+  el.className = 'toast' + (opts.bad ? ' bad' : '');
+  const span = document.createElement('span'); span.textContent = msg; el.append(span);
+  if (opts.action) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = opts.action.label;
+    b.addEventListener('click', () => { el.remove(); opts.action.fn(); });
+    el.append(b);
+  }
+  box.append(el);
+  while (box.children.length > 3) box.firstElementChild.remove();
+  setTimeout(() => el.remove(), opts.ms || 6000);
+}
+
+/* ================= shell ================= */
+function renderTabs() {
+  if (S.tab === 'config' && !S.isOwner) S.tab = 'chamar';
+  $('#tabs').innerHTML = TABS.filter(t => !t.owner || S.isOwner).map(t =>
+    `<button type="button" role="tab" class="tab" data-tab="${t.id}" aria-selected="${S.tab === t.id}">${t.label}${t.id === 'chamar' ? '<span class="tab-count" id="cnt-chamar"></span>' : ''}</button>`
+  ).join('');
+}
+function setTab(id) {
+  S.tab = id; LS.set('cl_tab', id); S.confirm = null; S.editNote = null;
+  renderTabs(); mount(); window.scrollTo(0, 0);
+}
+function renderChrome() {
+  const pill = $('#me-pill');
+  const ready = S.ready.config && activeAtts().length > 0;
+  pill.hidden = !ready;
+  if (ready) {
+    pill.innerHTML = S.me
+      ? `<span class="avatar">${esc(initials(attName(S.me)))}</span><span>${esc(attName(S.me))}</span><span class="sub">· trocar</span>`
+      : `<span class="avatar empty">?</span><span>Escolher atendente</span>`;
+  }
+  const cnt = $('#cnt-chamar');
+  if (cnt) cnt.textContent = S.me && allReady() ? (n => n ? fmtN(n) : '')(S.leads.filter(l => l.s === 'p' && l.a === S.me).length) : '';
+  const ban = $('#banner');
+  const msg = S.fatal || (S.readonly ? 'Você está só visualizando esta página. Para marcar leads, peça ao gestor acesso de edição.' : '');
+  ban.hidden = !msg; ban.innerHTML = msg ? `<div>${esc(msg)}</div>` : '';
+}
+
+let raf = 0;
+function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; update(); }); }
+function update() {
+  if (S.ready.config && S.me) {
+    const a = S.config.attendants[S.me];
+    if (!a || a.active === false) { S.me = null; LS.set('cl_me', null); }
+  }
+  renderChrome();
+  ({ chamar: renderChamar, chamados: renderChamados, painel: renderPainel, config: renderConfig })[S.tab]?.();
+}
+
+function mount() {
+  const v = $('#view');
+  if (S.tab === 'chamar') {
+    v.innerHTML = `
+      <div id="ch-top"></div>
+      <div class="toolbar" id="ch-bar" hidden>
+        <div class="search">${ICON.search}<input class="input" type="search" id="q-pend" placeholder="Buscar na sua fila" autocomplete="off"></div>
+        <div class="prefs">
+          <label class="check" style="align-items:center"><input type="checkbox" id="opt-msg" style="margin:0"> Com mensagem pronta</label>
+          <select class="select" id="opt-open" aria-label="Onde abrir o WhatsApp">
+            <option value="web">Abrir no WhatsApp Web</option>
+            <option value="app">Abrir no aplicativo</option>
+          </select>
+        </div>
+      </div>
+      <ul class="leads" id="ch-list"></ul>`;
+    $('#q-pend').value = S.q.pend;
+    $('#opt-msg').checked = !!S.prefs.msg;
+    $('#opt-open').value = S.prefs.open;
+  } else if (S.tab === 'chamados') {
+    v.innerHTML = `
+      <div class="page-head">
+        <div><h1>Já chamados</h1><p class="sub" id="cd-count">&nbsp;</p></div>
+        <div id="cd-act"></div>
+      </div>
+      <div class="filters">
+        <div class="search">${ICON.search}<input class="input" type="search" id="q-called" placeholder="Buscar nome ou telefone" autocomplete="off"></div>
+        <select class="select" id="f-att" aria-label="Atendente"></select>
+        <select class="select" id="f-res" aria-label="Resultado">
+          <option value="all">Todos os resultados</option>
+          ${RESULTS.map(r => `<option value="${r.id}">${r.label}</option>`).join('')}
+        </select>
+        <select class="select" id="f-period" aria-label="Período">
+          <option value="hoje">Hoje</option><option value="7">Últimos 7 dias</option>
+          <option value="30">Últimos 30 dias</option><option value="all">Todo o período</option>
+        </select>
+      </div>
+      <ul class="leads" id="cd-list"></ul>`;
+    $('#q-called').value = S.q.called; $('#f-res').value = S.f.res; $('#f-period').value = S.f.period;
+    S.attSig = '';
+  } else if (S.tab === 'painel') {
+    v.innerHTML = `<div class="stack" id="pn"></div>`;
+  } else if (S.tab === 'config') {
+    v.innerHTML = `
+      <div class="stack">
+        <div class="page-head"><div><h1>Configurar</h1><p class="sub">Só você, o dono da página, vê esta aba.</p></div></div>
+        <section class="panel" id="imp-panel">
+          <div class="panel-head"><div><h2>Importar lista de leads</h2><p class="sub">Excel (.xlsx) ou CSV. O sistema encontra as colunas de nome e telefone sozinho.</p></div></div>
+          <div id="imp-body"></div>
+        </section>
+        <div class="cfg-grid">
+          <section class="panel" id="team-panel">
+            <h2>Equipe</h2>
+            <p class="sub" style="margin-top:2px">Cada atendente escolhe o próprio nome ao abrir a página.</p>
+            <form class="inline-form" id="att-form" style="margin-top:14px">
+              <label class="vh" for="att-name">Nome do atendente</label>
+              <input class="input" id="att-name" maxlength="40" placeholder="Nome do atendente" autocomplete="off">
+              <button class="btn btn-primary" type="submit">${ICON.plus}Adicionar</button>
+            </form>
+            <ul class="team" id="team-list"></ul>
+            <div class="note"><b>Para a equipe acessar:</b> clique em Compartilhar nesta página e convide cada atendente pelo e-mail, com permissão de <b>edição</b>. Cada um entra com a própria conta Claude.</div>
+          </section>
+          <section class="panel" id="tpl-panel">
+            <h2>Mensagem pronta</h2>
+            <p class="sub" style="margin-top:2px">Já vem escrita quando o atendente clica em Chamar no WhatsApp. Ele pode ajustar antes de enviar.</p>
+            <label class="vh" for="tpl-text">Mensagem</label>
+            <textarea class="input" id="tpl-text" rows="5" maxlength="1000" style="margin-top:14px"></textarea>
+            <div class="vars" id="tpl-vars"></div>
+            <p class="eyebrow" style="margin-top:14px">Como o cliente vai receber</p>
+            <div class="bubble" id="tpl-prev"></div>
+            <div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn-primary" type="button" data-action="tpl-save" id="tpl-save">Salvar mensagem</button>
+              <button class="btn btn-ghost" type="button" data-action="tpl-reset">Voltar ao texto padrão</button>
+            </div>
+          </section>
+        </div>
+        <section class="panel" id="lists-panel">
+          <div class="panel-head"><div><h2>Listas importadas</h2><p class="sub">Excluir uma lista apaga os leads dela, inclusive o histórico de chamados.</p></div></div>
+          <div id="lists-body"></div>
+        </section>
+      </div>`;
+    S.tplDirty = false;
+    $('#tpl-text').value = S.config.template || DEFAULT_TEMPLATE;
+    renderImport();
+  }
+  update();
+}
+
+/* ================= tab: A chamar ================= */
+function skeleton(n) { return Array.from({ length: n }, () => '<li class="skel"></li>').join(''); }
+
+function onboardingHTML(hasTeam, hasLeads) {
+  return `<section class="panel" style="margin-bottom:20px">
+    <h2>Deixe o sistema pronto em 3 passos</h2>
+    <p class="sub" style="margin-top:2px">Depois disso, a equipe só abre esta página, escolhe o nome e começa a chamar.</p>
+    <ol class="steps">
+      <li class="${hasTeam ? 'done' : ''}"><span class="n">${hasTeam ? ICON.check : '1'}</span><h3>Cadastre a equipe</h3><p>Coloque o nome de cada atendente.</p>
+        <div class="row"><button class="btn btn-line btn-sm" data-action="goto" data-go="config" data-focus="att-name">Cadastrar atendentes</button></div></li>
+      <li class="${hasLeads ? 'done' : ''}"><span class="n">${hasLeads ? ICON.check : '2'}</span><h3>Suba a lista de leads</h3><p>Excel ou CSV com nome e telefone.</p>
+        <div class="row"><button class="btn btn-line btn-sm" data-action="goto" data-go="config">Importar lista</button>${hasLeads ? '' : '<button class="btn btn-ghost btn-sm" data-action="demo">Testar com exemplo</button>'}</div></li>
+      <li><span class="n">3</span><h3>Convide a equipe</h3><p>Em Compartilhar, convide cada atendente pelo e-mail com permissão de edição.</p></li>
+    </ol>
+  </section>`;
+}
+function chooserHTML(act) {
+  return `<section class="panel">
+    <h2>Quem está atendendo agora?</h2>
+    <p class="sub" style="margin-top:2px">Escolha seu nome. Tudo o que você marcar fica registrado com ele.</p>
+    <div class="chooser">${act.map(a => `<button type="button" data-action="set-me" data-id="${esc(a.id)}" aria-pressed="${a.id === S.me}"><span class="avatar lg">${esc(initials(a.name))}</span>${esc(a.name)}</button>`).join('')}</div>
+    ${S.isOwner && !S.me ? '<p class="sub" style="margin-top:14px">Você é o gestor: não precisa escolher um nome para acompanhar pelo Painel e por Já chamados. Escolha só se também for chamar clientes.</p>' : ''}
+    ${S.me ? '<div style="margin-top:14px"><button class="btn btn-ghost btn-sm" data-action="cancel-choose">Cancelar</button></div>' : ''}
+  </section>`;
+}
+
+function fillTemplate(t, lead, att) {
+  const first = String(lead.n || '').trim().split(/\s+/)[0] || '';
+  const firstCap = first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : '';
+  const x = lead.x || {};
+  return String(t || '').replace(/\{([^{}]{1,40})\}/g, (m, k) => {
+    const key = norm(k);
+    if (key === 'nome') return firstCap;
+    if (key === 'nome_completo') return String(lead.n || '');
+    if (key === 'atendente') return att || '';
+    for (const [kk, vv] of Object.entries(x)) if (norm(kk) === key) return String(vv);
+    return '';
+  }).replace(/,\s*([!?.])/g, '$1').replace(/[ \t]{2,}/g, ' ');
+}
+function waLink(lead, withText = true) {
+  const base = S.prefs.open === 'app' ? 'https://api.whatsapp.com/send' : 'https://web.whatsapp.com/send';
+  const text = withText && S.prefs.msg ? fillTemplate(S.config.template || DEFAULT_TEMPLATE, lead, attName(S.me)) : '';
+  return `${base}?phone=${encodeURIComponent(lead.p)}${text ? '&text=' + encodeURIComponent(text) : ''}`;
+}
+function extrasHTML(l, max = 3) {
+  const x = l.x || {}; const ks = Object.keys(x).slice(0, max);
+  return ks.map(k => `<span class="x"><b>${esc(k)}:</b> ${esc(x[k])}</span>`).join('');
+}
+function matchQ(l, q, qd) {
+  if (qd && String(l.p || '').includes(qd)) return true;
+  return norm(l.n).includes(q) || norm(listNameOf(l)).includes(q);
+}
+
+function renderChamar() {
+  const top = $('#ch-top'), bar = $('#ch-bar'), list = $('#ch-list');
+  if (!top) return;
+  if (S.fatal) { top.innerHTML = ''; bar.hidden = true; list.hidden = true; return; }
+  if (!allReady()) { top.innerHTML = ''; bar.hidden = true; list.hidden = false; list.innerHTML = skeleton(5); return; }
+  const act = activeAtts(); const parts = [];
+  if (S.isOwner && (act.length === 0 || S.leads.length === 0)) parts.push(onboardingHTML(act.length > 0, S.leads.length > 0));
+  if (act.length === 0) {
+    if (!S.isOwner) parts.push(`<section class="panel"><div class="empty"><h2>A equipe ainda não foi cadastrada</h2><p>Peça ao gestor para cadastrar os atendentes. Depois é só recarregar esta página.</p></div></section>`);
+    top.innerHTML = parts.join(''); bar.hidden = true; list.hidden = true; return;
+  }
+  if (!S.me || S.choosing) {
+    parts.push(chooserHTML(act));
+    top.innerHTML = parts.join(''); bar.hidden = true; list.hidden = true; return;
+  }
+  const today = startOfDay(Date.now());
+  const mine = S.leads.filter(l => l.s === 'p' && l.a === S.me);
+  const free = S.leads.filter(l => l.s === 'p' && !l.a).length;
+  const doneToday = S.leads.filter(l => l.s === 'c' && l.by === S.me && (l.at || 0) >= today).length;
+  const pullN = Math.min(10, free);
+  parts.push(`<div class="desk-head">
+      <div>
+        <p class="eyebrow">Atendendo como</p>
+        <h1><span class="avatar lg">${esc(initials(attName(S.me)))}</span>${esc(attName(S.me))}</h1>
+      </div>
+      <div class="desk-actions">
+        <div class="tally">
+          <div><b>${fmtN(mine.length)}</b><span>na sua fila</span></div>
+          <div><b>${fmtN(doneToday)}</b><span>você chamou hoje</span></div>
+          <div><b>${fmtN(free)}</b><span>livres para pegar</span></div>
+        </div>
+        <button class="btn btn-primary" data-action="pull" ${(!free || S.pulling || S.readonly) ? 'disabled' : ''}>${S.pulling ? 'Pegando…' : (free ? `${ICON.plus}Pegar mais ${pullN} leads` : 'Fila livre vazia')}</button>
+      </div>
+    </div>`);
+  top.innerHTML = parts.join('');
+  bar.hidden = mine.length === 0;
+  list.hidden = false;
+
+  if (!mine.length) {
+    list.innerHTML = `<li><div class="empty">${free
+      ? `<h2>Sua fila está vazia</h2><p>Tem ${fmtN(free)} leads livres esperando. Pegue alguns para começar.</p><button class="btn btn-primary" data-action="pull" ${S.pulling || S.readonly ? 'disabled' : ''}>${ICON.plus}Pegar ${pullN} leads</button>`
+      : `<h2>Tudo chamado por aqui</h2><p>Não há leads livres na fila. Quando o gestor subir uma nova lista, eles aparecem aqui.</p>`}</div></li>`;
+    return;
+  }
+  const q = norm(S.q.pend), qd = S.q.pend.replace(/\D/g, '');
+  let rows = q ? mine.filter(l => matchQ(l, q, qd.length >= 3 ? qd : '')) : mine;
+  rows.sort((a, b) => (a.ca || 0) - (b.ca || 0) || (a.o || 0) - (b.o || 0));
+  const total = rows.length; rows = rows.slice(0, S.limit.pend);
+  if (!total) { list.innerHTML = `<li><div class="empty"><p>Nenhum lead da sua fila combina com “${esc(S.q.pend)}”.</p></div></li>`; return; }
+  const dis = S.readonly ? 'disabled' : '';
+  list.innerHTML = rows.map(l => `
+    <li class="lead${l.w ? ' opened' : ''}">
+      <div>
+        <div class="lead-name">${esc(l.n || 'Sem nome')}</div>
+        <div class="lead-meta"><span class="phone">${esc(fmtPhone(l.p))}</span><span class="tag">${esc(listNameOf(l))}</span>${extrasHTML(l)}${l.w ? `<span class="opened-note">WhatsApp aberto ${esc(fmtWhen(l.w))}</span>` : ''}</div>
+      </div>
+      <div class="lead-act">
+        <a class="btn btn-wa" href="${esc(waLink(l))}" target="_blank" rel="noopener noreferrer" data-action="wa" data-k="${esc(l.k)}">${ICON.chat}Chamar no WhatsApp</a>
+        <button class="btn btn-line btn-done" data-action="done" data-k="${esc(l.k)}" ${dis}>${ICON.check}Marcar como chamado</button>
+        <button class="btn btn-ghost btn-sm" data-action="nowa" data-k="${esc(l.k)}" ${dis} title="O número não tem WhatsApp">Sem WhatsApp</button>
+      </div>
+    </li>`).join('') + (total > rows.length ? `<li class="more"><button class="btn btn-line" data-action="more-pend">Mostrar mais (${fmtN(total - rows.length)})</button></li>` : '');
+}
+
+async function pull(n) {
+  if (S.pulling || !S.me || S.readonly) return;
+  S.pulling = true; schedule();
+  let need = n, got = 0;
+  try {
+    const order = cid => { const c = S.chunks[cid] || {}; return [(S.lists[c.list]?.createdAt || c.createdAt || 0), c.idx || 0]; };
+    const cids = Object.keys(S.chunks)
+      .filter(cid => Object.values(S.chunks[cid].leads || {}).some(l => l && l.s === 'p' && !l.a))
+      .sort((a, b) => { const A = order(a), B = order(b); return A[0] - B[0] || A[1] - B[1]; });
+    for (const cid of cids) {
+      if (need <= 0) break;
+      const ref = S.db.doc('batches/' + cid);
+      let ok = false;
+      for (let i = 0; i < 6 && !ok; i++) {
+        const r = await ref.acquire({ holder: S.tabId, ttlMs: 2500 });
+        if (r.acquired) ok = true;
+        else { const until = r.expiresAt ? Date.parse(r.expiresAt) - Date.now() : 500; await sleep(Math.min(2600, Math.max(150, until)) + Math.random() * 250); }
+      }
+      if (!ok) continue;
+      const snap = await ref.get();
+      if (!snap.exists) continue;
+      const free = Object.entries(snap.data().leads || {})
+        .filter(([, l]) => l && l.s === 'p' && !l.a)
+        .sort((a, b) => (a[1].o || 0) - (b[1].o || 0))
+        .slice(0, need);
+      if (!free.length) continue;
+      const now = Date.now(), patch = {};
+      free.forEach(([id]) => { patch[id] = { a: S.me, ca: now }; });
+      await write('batches/' + cid, 'update', { leads: patch });
+      need -= free.length; got += free.length;
+    }
+    toast(got ? `${got} ${got === 1 ? 'lead entrou' : 'leads entraram'} na sua fila.` : 'Não há leads livres agora. Outro atendente pode ter pegado os últimos.');
+  } catch (e) { toast(errMsg(e), { bad: true }); }
+  finally { S.pulling = false; schedule(); }
+}
+
+function markCalled(lead, result) {
+  patchLead(lead, { s: 'c', r: result, by: S.me, at: Date.now(), u: S.uid || null })
+    .catch(e => toast(errMsg(e), { bad: true }));
+  toast(result === 'invalido' ? `${lead.n || 'Lead'}: marcado como sem WhatsApp.` : `${lead.n || 'Lead'}: marcado como chamado.`, {
+    action: { label: 'Desfazer', fn: () => patchLead(lead, { s: 'p', r: null, by: null, at: null }).catch(e => toast(errMsg(e), { bad: true })) }
+  });
+}
+
+/* ================= tab: Já chamados ================= */
+function renderChamados() {
+  const list = $('#cd-list'); if (!list) return;
+  if (!allReady()) { list.innerHTML = skeleton(6); return; }
+  // attendant filter options
+  const all = attList();
+  const sig = all.map(a => a.id + a.name + a.active).join('|') + '|' + S.me;
+  const fa = $('#f-att');
+  if (sig !== S.attSig) {
+    S.attSig = sig;
+    fa.innerHTML = `<option value="all">Todos os atendentes</option>${S.me ? '<option value="me">Só os meus</option>' : ''}` +
+      all.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.active === false ? ' (removido)' : ''}</option>`).join('');
+    if (![...fa.options].some(o => o.value === S.f.att)) S.f.att = 'all';
+    fa.value = S.f.att;
+  }
+  const today = startOfDay(Date.now());
+  const from = S.f.period === 'hoje' ? today : S.f.period === '7' ? today - 6 * DAY : S.f.period === '30' ? today - 29 * DAY : 0;
+  const attF = S.f.att === 'me' ? S.me : S.f.att;
+  const q = norm(S.q.called), qd = S.q.called.replace(/\D/g, '');
+  let rows = S.leads.filter(l => l.s === 'c' && (l.at || 0) >= from
+    && (attF === 'all' || l.by === attF)
+    && (S.f.res === 'all' || (l.r || 'enviado') === S.f.res)
+    && (!q || matchQ(l, q, qd.length >= 3 ? qd : '')));
+  rows.sort((a, b) => (b.at || 0) - (a.at || 0));
+  S.lastCalledRows = rows;
+  $('#cd-count').textContent = `${fmtN(rows.length)} ${rows.length === 1 ? 'lead' : 'leads'} neste filtro`;
+  $('#cd-act').innerHTML = (S.isOwner && S.dl && rows.length) ? `<button class="btn btn-line btn-sm" data-action="export-called">${ICON.down}Baixar planilha (CSV)</button>` : '';
+  const total = rows.length; rows = rows.slice(0, S.limit.called);
+  const ed = S.editNote && document.getElementById('note-' + S.editNote);
+  const kept = ed ? { v: ed.value, f: document.activeElement === ed, s: ed.selectionStart, e: ed.selectionEnd } : null;
+  if (!total) {
+    const any = S.leads.some(l => l.s === 'c');
+    list.innerHTML = `<li><div class="empty"><h2>${any ? 'Nada neste filtro' : 'Ninguém foi chamado ainda'}</h2><p>${any ? 'Tente mudar o período ou o atendente.' : 'Quando um atendente marcar um lead como chamado, ele aparece aqui com o nome de quem chamou.'}</p></div></li>`;
+    return;
+  }
+  list.innerHTML = rows.map(l => {
+    const r = resOf(l.r), can = !S.readonly && (S.isOwner || (S.me && l.by === S.me));
+    const editing = S.editNote === l.k;
+    return `<li class="crow">
+      <div style="min-width:0">
+        <div class="lead-name">${esc(l.n || 'Sem nome')}</div>
+        <div class="lead-meta"><span class="phone">${esc(fmtPhone(l.p))}</span><span class="tag">${esc(listNameOf(l))}</span>${extrasHTML(l, 2)}</div>
+        ${l.nt && !editing ? `<div class="note-text">${esc(l.nt)}</div>` : ''}
+      </div>
+      <div class="who"><span class="avatar">${esc(initials(attName(l.by)))}</span><div style="min-width:0"><div class="nm">${esc(attName(l.by))}</div><div class="when">${esc(fmtWhen(l.at))}</div></div></div>
+      <div class="res">${can
+        ? `<label class="vh" for="r-${esc(l.k)}">Resultado</label><select class="res-select t-${r.tone}" id="r-${esc(l.k)}" data-action="result" data-k="${esc(l.k)}">${RESULTS.map(o => `<option value="${o.id}" ${o.id === r.id ? 'selected' : ''}>${o.label}</option>`).join('')}</select>`
+        : `<span class="pill t-${r.tone}">${r.label}</span>`}</div>
+      <div class="crow-act">
+        <a class="icon-btn wa" href="${esc(waLink(l, false))}" target="_blank" rel="noopener noreferrer" title="Abrir conversa no WhatsApp" aria-label="Abrir conversa no WhatsApp">${ICON.chat}</a>
+        ${can ? `<button class="icon-btn" data-action="note-edit" data-k="${esc(l.k)}" title="${l.nt ? 'Editar observação' : 'Adicionar observação'}" aria-label="Observação">${ICON.note}</button>
+        <button class="icon-btn" data-action="uncall" data-k="${esc(l.k)}" title="Voltar para a fila" aria-label="Voltar para a fila">${ICON.undo}</button>` : ''}
+      </div>
+      ${editing ? `<div class="note-edit"><label class="vh" for="note-${esc(l.k)}">Observação</label><textarea class="input" id="note-${esc(l.k)}" rows="2" maxlength="300" placeholder="Ex.: pediu para retornar sexta de manhã">${esc(l.nt || '')}</textarea><div class="row"><button class="btn btn-ghost btn-sm" data-action="note-cancel">Cancelar</button><button class="btn btn-primary btn-sm" data-action="note-save" data-k="${esc(l.k)}">Salvar observação</button></div></div>` : ''}
+    </li>`;
+  }).join('') + (total > rows.length ? `<li class="more"><button class="btn btn-line" data-action="more-called">Mostrar mais (${fmtN(total - rows.length)})</button></li>` : '');
+  const ed2 = kept && document.getElementById('note-' + S.editNote);
+  if (ed2) { ed2.value = kept.v; if (kept.f) { ed2.focus(); try { ed2.setSelectionRange(kept.s, kept.e); } catch {} } }
+}
+
+/* ================= tab: Painel ================= */
+function renderPainel() {
+  const pn = $('#pn'); if (!pn) return;
+  if (!allReady()) { pn.innerHTML = `<ul class="leads">${skeleton(4)}</ul>`; return; }
+  const today = startOfDay(Date.now()), wk = today - 6 * DAY;
+  const L = S.leads, total = L.length;
+  const called = L.filter(l => l.s === 'c');
+  const held = L.filter(l => l.s === 'p' && l.a).length;
+  const free = L.filter(l => l.s === 'p' && !l.a).length;
+  const todayN = called.filter(l => (l.at || 0) >= today).length;
+  const pct = total ? Math.round(called.length / total * 100) : 0;
+  const w = n => total ? (n / total * 100).toFixed(2) + '%' : '0%';
+
+  const per = new Map();
+  for (const a of attList()) per.set(a.id, { id: a.id, name: a.name, active: a.active !== false, today: 0, week: 0, total: 0, hot: 0, won: 0, queue: 0 });
+  for (const l of L) {
+    if (l.s === 'p' && l.a) { if (!per.has(l.a)) per.set(l.a, { id: l.a, name: attName(l.a), active: false, today: 0, week: 0, total: 0, hot: 0, won: 0, queue: 0 }); per.get(l.a).queue++; }
+    if (l.s === 'c' && l.by) {
+      if (!per.has(l.by)) per.set(l.by, { id: l.by, name: attName(l.by), active: false, today: 0, week: 0, total: 0, hot: 0, won: 0, queue: 0 });
+      const p = per.get(l.by); p.total++;
+      if ((l.at || 0) >= today) p.today++;
+      if ((l.at || 0) >= wk) p.week++;
+      if (l.r === 'interessado') p.hot++;
+      if (l.r === 'fechou') p.won++;
+    }
+  }
+  const rows = [...per.values()].filter(p => p.active || p.total || p.queue).sort((a, b) => b.today - a.today || b.week - a.week || a.name.localeCompare(b.name));
+  const maxT = Math.max(1, ...rows.map(r => r.today));
+  const resCount = RESULTS.map(r => ({ ...r, n: called.filter(l => (l.r || 'enviado') === r.id).length }));
+
+  pn.innerHTML = `
+    <div class="page-head"><div><h1>Painel</h1><p class="sub">Atualiza sozinho conforme a equipe marca os leads.</p></div>
+      ${(S.isOwner && S.dl && total) ? `<button class="btn btn-line btn-sm" data-action="export-all">${ICON.down}Baixar base completa (CSV)</button>` : ''}</div>
+    <div class="tiles">
+      <div class="tile"><p class="eyebrow">Leads na base</p><p class="v">${fmtN(total)}</p><p class="s">${fmtN(Object.keys(listsMap()).length)} ${Object.keys(listsMap()).length === 1 ? 'lista' : 'listas'}</p></div>
+      <div class="tile"><p class="eyebrow">Já chamados</p><p class="v">${fmtN(called.length)}</p><p class="s">${pct}% da base</p></div>
+      <div class="tile"><p class="eyebrow">Chamados hoje</p><p class="v">${fmtN(todayN)}</p><p class="s">pela equipe toda</p></div>
+      <div class="tile"><p class="eyebrow">Faltam chamar</p><p class="v">${fmtN(free + held)}</p><p class="s">${fmtN(held)} com atendentes · ${fmtN(free)} livres</p></div>
+    </div>
+    <section class="panel">
+      <h2>Andamento da base</h2>
+      <div class="meter" style="margin-top:14px" role="img" aria-label="${fmtN(called.length)} chamados, ${fmtN(held)} com atendentes, ${fmtN(free)} livres">
+        <i class="m-done" style="width:${w(called.length)}"></i><i class="m-held" style="width:${w(held)}"></i>
+      </div>
+      <div class="legend"><span><i></i>Chamados · ${fmtN(called.length)}</span><span><i class="h"></i>Na fila de um atendente · ${fmtN(held)}</span><span><i class="f"></i>Livres · ${fmtN(free)}</span></div>
+    </section>
+    <section class="panel">
+      <h2>Por atendente</h2>
+      ${rows.length ? `<div class="tbl-wrap" style="margin-top:10px"><table class="tbl">
+        <thead><tr><th>Atendente</th><th>Hoje</th><th>7 dias</th><th>Total</th><th>Interessados</th><th>Fechados</th><th>Na fila</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td><span style="display:inline-flex;align-items:center;gap:10px"><span class="avatar">${esc(initials(r.name))}</span><b style="font-weight:600">${esc(r.name)}</b>${r.active ? '' : '<span class="sub">(removido)</span>'}</span></td>
+          <td class="bar-cell"><div class="hbar"><span class="track"><i style="width:${(r.today / maxT * 100).toFixed(1)}%"></i></span><b>${fmtN(r.today)}</b></div></td>
+          <td>${fmtN(r.week)}</td><td>${fmtN(r.total)}</td><td>${fmtN(r.hot)}</td><td>${fmtN(r.won)}</td><td>${fmtN(r.queue)}</td>
+        </tr>`).join('')}</tbody></table></div>` : '<p class="sub" style="margin-top:8px">Nenhum atendente cadastrado ainda.</p>'}
+    </section>
+    <section class="panel">
+      <h2>Resultados dos chamados</h2>
+      <div class="res-sum" style="margin-top:12px">${resCount.map(r => `<span class="pill t-${r.tone}">${r.label} · <b>${fmtN(r.n)}</b></span>`).join('')}</div>
+    </section>`;
+}
+function listsMap() {
+  const m = {};
+  for (const [id, d] of Object.entries(S.lists)) m[id] = { id, name: d.name, createdAt: d.createdAt, total: 0, called: 0 };
+  for (const l of S.leads) {
+    if (!m[l.list]) m[l.list] = { id: l.list, name: l.listName || 'Lista', createdAt: S.chunks[l.chunk]?.createdAt, total: 0, called: 0 };
+    m[l.list].total++; if (l.s === 'c') m[l.list].called++;
+  }
+  return m;
+}
+
+/* ================= tab: Configurar ================= */
+function renderConfig() {
+  if (!$('#team-list')) return;
+  if (!allReady()) { $('#team-list').innerHTML = '<li class="sub">Carregando…</li>'; $('#lists-body').innerHTML = ''; return; }
+  // team
+  const act = activeAtts();
+  $('#team-list').innerHTML = act.length ? act.map(a => {
+    const queue = S.leads.filter(l => l.s === 'p' && l.a === a.id).length;
+    const done = S.leads.filter(l => l.s === 'c' && l.by === a.id).length;
+    const ck = 'att:' + a.id;
+    return `<li><span class="avatar">${esc(initials(a.name))}</span>
+      <div class="t-main"><b>${esc(a.name)}</b><span>${fmtN(queue)} na fila · ${fmtN(done)} chamados</span></div>
+      ${S.confirm === ck
+        ? `<div class="confirm">Remover ${esc(a.name)}?${queue ? ` Os ${fmtN(queue)} leads da fila voltam para a fila livre.` : ''}<button class="btn btn-danger btn-sm" data-action="att-rm-yes" data-id="${esc(a.id)}">Remover</button><button class="btn btn-ghost btn-sm" data-action="confirm-no">Cancelar</button></div>`
+        : `<div class="t-act">${queue ? `<button class="btn btn-ghost btn-sm" data-action="att-release" data-id="${esc(a.id)}" title="Devolve os leads não chamados para a fila livre">Devolver ${fmtN(queue)} à fila</button>` : ''}<button class="btn btn-ghost btn-sm" data-action="confirm" data-c="${esc(ck)}">Remover</button></div>`}
+    </li>`;
+  }).join('') : '<li class="sub" style="border:0">Nenhum atendente ainda. Adicione o primeiro acima.</li>';
+
+  // template
+  const ta = $('#tpl-text');
+  if (!S.tplDirty && document.activeElement !== ta) ta.value = S.config.template || DEFAULT_TEMPLATE;
+  const extraKeys = [...new Set(S.leads.flatMap(l => Object.keys(l.x || {})))].slice(0, 8);
+  $('#tpl-vars').innerHTML = 'Inserir: ' + ['{nome}', '{nome_completo}', '{atendente}', ...extraKeys.map(k => `{${k}}`)].map(v => `<button type="button" data-action="var" data-v="${esc(v)}">${esc(v)}</button>`).join('');
+  renderTplPreview();
+  $('#tpl-save').disabled = !S.tplDirty;
+
+  // lists
+  const lm = Object.values(listsMap()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  $('#lists-body').innerHTML = lm.length ? `<div class="tbl-wrap"><table class="tbl lists-tbl">
+    <thead><tr><th>Lista</th><th>Importada em</th><th>Leads</th><th>Chamados</th><th style="width:22%">Andamento</th><th></th></tr></thead>
+    <tbody>${lm.map(x => {
+      const ck = 'list:' + x.id, p = x.total ? x.called / x.total * 100 : 0;
+      return `<tr>
+        <td><b style="font-weight:600">${esc(x.name)}</b></td>
+        <td>${esc(fmtDate(x.createdAt))}</td><td>${fmtN(x.total)}</td><td>${fmtN(x.called)}</td>
+        <td><div class="progress" title="${Math.round(p)}%"><i style="width:${p.toFixed(1)}%"></i></div></td>
+        <td style="white-space:nowrap">${S.confirm === ck
+          ? `<span class="confirm" style="justify-content:flex-end">Apagar ${fmtN(x.total)} leads? <button class="btn btn-danger btn-sm" data-action="list-del-yes" data-id="${esc(x.id)}">Excluir</button><button class="btn btn-ghost btn-sm" data-action="confirm-no">Cancelar</button></span>`
+          : `<button class="btn btn-ghost btn-sm" data-action="confirm" data-c="${esc(ck)}">Excluir</button>`}</td>
+      </tr>`; }).join('')}</tbody></table></div>`
+    : '<p class="sub">Nenhuma lista importada ainda.</p>';
+
+  // keep the import distribution checkboxes in sync with the team
+  if (S.imp && !S.impBusy) {
+    const box = $('#dist-to');
+    const sig = act.map(a => a.id).join(',');
+    if (box && box.dataset.sig !== sig) renderImport();
+  }
+}
+function renderTplPreview() {
+  const ta = $('#tpl-text'); if (!ta) return;
+  const sample = S.leads[0] || { n: 'Mariana Souza', x: {} };
+  const att = S.me ? attName(S.me) : (activeAtts()[0]?.name || 'Ana');
+  $('#tpl-prev').textContent = fillTemplate(ta.value, sample, att) || '(sem mensagem: o WhatsApp abre com a conversa em branco)';
+}
+
+/* ---------- import ---------- */
+let xlsxPromise = null;
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { s.remove(); rej(new Error('load')); }; document.head.append(s); });
+}
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  if (!xlsxPromise) {
+    xlsxPromise = loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js')
+      .catch(() => loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'));
+    xlsxPromise.catch(() => { xlsxPromise = null; });
+  }
+  return xlsxPromise;
+}
+function decodeText(buf) {
+  let t;
+  try { t = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { t = new TextDecoder('windows-1252').decode(buf); }
+  return t.replace(/^﻿/, '');
+}
+function parseDelimited(text) {
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const cands = [';', ',', '\t', '|'];
+  let delim = ',', best = -1;
+  for (const c of cands) { const n = firstLine.split(c).length - 1; if (n > best) { best = n; delim = c; } }
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else if (ch === '"' && cur === '') q = true;
+    else if (ch === delim) { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += ch;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+const cleanRows = rows => rows.map(r => (r || []).map(v => v == null ? '' : (typeof v === 'string' ? v.trim() : v))).filter(r => r.some(v => v !== ''));
+
+function detectColumns(rows, header) {
+  const width = Math.max(0, ...rows.slice(0, 300).map(r => r.length));
+  const heads = header ? (rows[0] || []) : [];
+  const sample = rows.slice(header ? 1 : 0, (header ? 1 : 0) + 150);
+  const ps = [], ns = [];
+  for (let i = 0; i < width; i++) {
+    const h = norm(heads[i]);
+    let phones = 0, alpha = 0, filled = 0;
+    for (const r of sample) {
+      const v = r[i]; if (v === '' || v == null) continue; filled++;
+      if (isPhoneLike(v)) phones++;
+      else if (/[a-zà-ú]{2,}/i.test(String(v)) && !String(v).includes('@')) alpha++;
+    }
+    let p = filled ? phones / filled : 0, n = filled ? alpha / filled : 0;
+    if (/(tel|fone|cel|whats|zap|numero|phone|mobile)/.test(h)) p += .6;
+    if (/(nome|name|cliente|lead)/.test(h)) n += .6;
+    if (/(mail|cidade|estado|uf|produto|origem|obs|data|status|campanha|endereco|bairro)/.test(h)) n -= .5;
+    ps.push(p); ns.push(n);
+  }
+  const phone = ps.length ? ps.indexOf(Math.max(...ps)) : -1;
+  let name = -1, bestN = -Infinity;
+  ns.forEach((v, i) => { if (i !== phone && v > bestN) { bestN = v; name = i; } });
+  return { phone, name };
+}
+
+function setImportRows(rows, fileName, extra = {}) {
+  rows = cleanRows(rows);
+  if (!rows.length) { toast('Não encontrei linhas com dados nesse arquivo.', { bad: true }); return; }
+  const header = !(rows[0] || []).some(isPhoneLike);
+  const cols = detectColumns(rows, header);
+  const act = activeAtts();
+  const d = new Date();
+  const base = fileName ? fileName.replace(/\.[^.]+$/, '') : `Lista ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`;
+  S.imp = Object.assign({
+    fileName: fileName || 'Linhas coladas', rows, header, colName: cols.name, colPhone: Math.max(0, cols.phone), ddd: '',
+    listName: base.slice(0, 60), dist: 'fila', distTo: act.map(a => a.id), dedupe: true
+  }, extra.set || {});
+  renderImport();
+}
+async function readFile(file) {
+  if (!file) return;
+  if (file.size > 25 * 1024 * 1024) { toast('Arquivo grande demais (máximo 25 MB).', { bad: true }); return; }
+  const name = file.name || 'arquivo';
+  $('#imp-body').innerHTML = `<p class="sub">Lendo ${esc(name)}…</p>`;
+  try {
+    const buf = await file.arrayBuffer();
+    if (/\.(csv|txt|tsv)$/i.test(name)) { S.imp = null; setImportRows(parseDelimited(decodeText(buf)), name); return; }
+    try { await loadXLSX(); }
+    catch { S.imp = null; renderImport(); toast('Não consegui abrir arquivos Excel aqui. Salve a planilha como CSV (Arquivo › Salvar como › CSV) ou cole as linhas.', { bad: true, ms: 10000 }); return; }
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheets = wb.SheetNames;
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheets[0]], { header: 1, raw: true, defval: '' });
+    S.imp = null;
+    setImportRows(rows, name, { set: { wb, sheets, sheet: sheets[0] } });
+  } catch (e) {
+    S.imp = null; renderImport();
+    toast('Não consegui ler esse arquivo. Confira se é uma planilha Excel ou CSV.', { bad: true });
+  }
+}
+function importHeads() {
+  const im = S.imp; const width = Math.max(0, ...im.rows.slice(0, 300).map(r => r.length));
+  return Array.from({ length: width }, (_, i) => {
+    const h = im.header ? String(im.rows[0][i] ?? '').trim() : '';
+    return { i, letter: colLetter(i), head: h, label: h ? h : `Coluna ${colLetter(i)}` };
+  });
+}
+function computeImport() {
+  const im = S.imp, heads = importHeads();
+  const start = im.header ? 1 : 0;
+  const extraCols = heads.filter(h => h.i !== im.colName && h.i !== im.colPhone && im.rows.slice(start, start + 300).some(r => r[h.i] !== '' && r[h.i] != null)).slice(0, 6);
+  const seenKeys = new Set();
+  extraCols.forEach(h => { let k = h.label.slice(0, 30); while (seenKeys.has(k)) k += '*'; seenKeys.add(k); h.key = k; });
+  const existing = new Set(im.dedupe ? S.leads.map(l => l.p) : []);
+  const seen = new Set(); const valid = []; let dup = 0, invalid = 0;
+  const ddd = (im.ddd || '').replace(/\D/g, '').slice(0, 2);
+  for (let r = start; r < im.rows.length; r++) {
+    const row = im.rows[r];
+    const p = normalizePhone(im.colPhone >= 0 ? row[im.colPhone] : '', ddd.length === 2 ? ddd : '');
+    if (!p) { invalid++; continue; }
+    if (seen.has(p) || existing.has(p)) { dup++; continue; }
+    seen.add(p);
+    let n = im.colName >= 0 ? String(row[im.colName] ?? '').trim() : '';
+    n = n.replace(/\s+/g, ' ').slice(0, 80);
+    const x = {};
+    for (const h of extraCols) { const v = row[h.i]; if (v !== '' && v != null) x[h.key] = String(v).slice(0, 60); }
+    valid.push(Object.keys(x).length ? { n, p, x } : { n, p });
+  }
+  return { valid, dup, invalid, extraCols };
+}
+function renderImport() {
+  const body = $('#imp-body'); if (!body) return;
+  const im = S.imp;
+  if (!im) {
+    body.innerHTML = `
+      <label class="drop" id="drop" for="imp-file">
+        <span style="color:var(--accent)">${ICON.file}</span>
+        <strong>Arraste a planilha aqui ou clique para escolher</strong>
+        <span class="sub">.xlsx, .xls, .csv — precisa ter pelo menos uma coluna de telefone</span>
+      </label>
+      <input class="vh" type="file" id="imp-file" accept=".xlsx,.xls,.xlsm,.ods,.csv,.txt,.tsv">
+      <details class="paste">
+        <summary>Ou cole as linhas copiadas da planilha</summary>
+        <label class="vh" for="imp-paste">Linhas coladas</label>
+        <textarea class="input" id="imp-paste" rows="5" placeholder="Maria Silva&#9;(41) 99876-5432&#10;João Pereira&#9;11 98765-4321"></textarea>
+        <div style="margin-top:8px"><button class="btn btn-line btn-sm" type="button" data-action="imp-paste">Usar estas linhas</button></div>
+      </details>
+      ${S.dl ? `<div style="margin-top:12px"><button class="link-btn" type="button" data-action="tpl-csv">Baixar planilha modelo (CSV)</button></div>` : ''}`;
+    return;
+  }
+  const heads = importHeads();
+  const opt = (sel) => heads.map(h => `<option value="${h.i}" ${h.i === sel ? 'selected' : ''}>${esc(h.letter)} · ${esc(h.label)}</option>`).join('');
+  const act = activeAtts();
+  body.innerHTML = `
+    <div class="imp-file"><strong>${esc(im.fileName)}</strong><span class="sub">${fmtN(im.rows.length - (im.header ? 1 : 0))} linhas</span>
+      <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" type="button" data-action="imp-reset">Trocar arquivo</button></div>
+    <div class="imp-grid">
+      <label class="field">Nome da lista<input class="input" id="imp-name" maxlength="60" value="${esc(im.listName)}"></label>
+      <label class="field">Coluna do nome<select class="select input" id="imp-col-name"><option value="-1">(sem nome)</option>${opt(im.colName)}</select></label>
+      <label class="field">Coluna do telefone<select class="select input" id="imp-col-phone">${opt(im.colPhone)}</select></label>
+      <label class="field">DDD padrão <small>só para números sem DDD</small><input class="input" id="imp-ddd" inputmode="numeric" maxlength="2" placeholder="ex.: 11" value="${esc(im.ddd)}"></label>
+      ${im.sheets && im.sheets.length > 1 ? `<label class="field">Aba da planilha<select class="select input" id="imp-sheet">${im.sheets.map(s => `<option ${s === im.sheet ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>` : ''}
+    </div>
+    <div class="imp-opts">
+      <label class="check"><input type="checkbox" id="imp-header" ${im.header ? 'checked' : ''}> A primeira linha é o cabeçalho (títulos das colunas)</label>
+      <label class="check"><input type="checkbox" id="imp-dedupe" ${im.dedupe ? 'checked' : ''}> Pular telefones que já estão no sistema<small>Evita chamar de novo quem já está em outra lista ou já foi chamado.</small></label>
+      <fieldset class="dist"><legend>Como distribuir</legend>
+        <label class="check"><input type="radio" name="dist" value="fila" ${im.dist === 'fila' ? 'checked' : ''}> Fila livre<small>Cada atendente clica em “Pegar mais leads” quando precisar. Ninguém pega o mesmo lead.</small></label>
+        <label class="check"><input type="radio" name="dist" value="dividir" ${im.dist === 'dividir' ? 'checked' : ''} ${act.length ? '' : 'disabled'}> Dividir agora entre a equipe<small>${act.length ? 'Os leads são repartidos em partes iguais entre os marcados abaixo.' : 'Cadastre a equipe primeiro para usar esta opção.'}</small></label>
+        <div class="dist-to" id="dist-to" data-sig="${esc(act.map(a => a.id).join(','))}" ${im.dist === 'dividir' ? '' : 'hidden'}>
+          ${act.map(a => `<label class="check" style="align-items:center"><input type="checkbox" data-dist-att="${esc(a.id)}" style="margin:0" ${im.distTo.includes(a.id) ? 'checked' : ''}> ${esc(a.name)}</label>`).join('')}
+        </div>
+      </fieldset>
+    </div>
+    <div class="imp-sum" id="imp-sum"></div>`;
+  renderImportSummary();
+}
+function renderImportSummary() {
+  const box = $('#imp-sum'); if (!box || !S.imp) return;
+  if (S.impBusy) {
+    const p = S.impBusy.total ? S.impBusy.done / S.impBusy.total * 100 : 0;
+    box.innerHTML = `<p style="font-weight:600">Importando… ${fmtN(S.impBusy.done)} de ${fmtN(S.impBusy.total)}</p><div class="progress"><i style="width:${p.toFixed(1)}%"></i></div>`;
+    return;
+  }
+  const { valid, dup, invalid, extraCols } = computeImport();
+  const im = S.imp;
+  const targets = im.dist === 'dividir' ? im.distTo.filter(id => activeAtts().some(a => a.id === id)) : [];
+  const per = targets.length ? Math.ceil(valid.length / targets.length) : 0;
+  const prev = valid.slice(0, 5);
+  box.innerHTML = `
+    <div class="imp-count">
+      <span class="chip good">${fmtN(valid.length)} prontos para importar</span>
+      ${dup ? `<span class="chip">${fmtN(dup)} repetidos, serão pulados</span>` : ''}
+      ${invalid ? `<span class="chip warn">${fmtN(invalid)} sem telefone válido</span>` : ''}
+      ${targets.length && valid.length ? `<span class="chip">≈ ${fmtN(per)} por atendente</span>` : ''}
+    </div>
+    ${prev.length ? `<div class="prev-wrap"><table class="prev"><thead><tr><th>Nome</th><th>WhatsApp</th>${extraCols.slice(0, 3).map(h => `<th>${esc(h.key)}</th>`).join('')}</tr></thead>
+      <tbody>${prev.map(v => `<tr><td>${esc(v.n || 'Sem nome')}</td><td class="phone">${esc(fmtPhone(v.p))}</td>${extraCols.slice(0, 3).map(h => `<td>${esc((v.x || {})[h.key] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+      : `<p class="sub">Nenhuma linha com telefone válido. Confira se a coluna do telefone está certa.</p>`}
+    ${invalid && im.colPhone >= 0 ? `<p class="sub">Telefones precisam ter DDD (ex.: 41 99876-5432). Se sua lista vem sem DDD, preencha o DDD padrão.</p>` : ''}
+    <div><button class="btn btn-primary" type="button" data-action="imp-go" ${valid.length && (im.dist !== 'dividir' || targets.length) ? '' : 'disabled'}>Importar ${fmtN(valid.length)} leads</button></div>`;
+}
+async function doImport() {
+  const im = S.imp; if (!im || S.impBusy) return;
+  const { valid, extraCols } = computeImport();
+  if (!valid.length) return;
+  const targets = im.dist === 'dividir' ? im.distTo.filter(id => activeAtts().some(a => a.id === id)) : [];
+  const now = Date.now();
+  const listId = 'L' + now.toString(36) + rid(4);
+  const name = (im.listName || '').trim() || `Lista ${new Date().toLocaleDateString('pt-BR')}`;
+  // chunk by size so each document stays well under the 256 KiB limit, leaving room for notes
+  const chunks = []; let cur = {}, size = 0, count = 0;
+  valid.forEach((v, i) => {
+    const lead = { ...v, o: i, s: 'p', a: targets.length ? targets[i % targets.length] : null, ca: targets.length ? now : null };
+    const sz = JSON.stringify(lead).length + 20;
+    if (count && (size + sz > 110000 || count >= 200)) { chunks.push(cur); cur = {}; size = 0; count = 0; }
+    cur[rid(8)] = lead; size += sz; count++;
+  });
+  if (count) chunks.push(cur);
+  S.impBusy = { done: 0, total: valid.length }; renderImportSummary();
+  try {
+    await write('lists/' + listId, 'set', { name, createdAt: now, total: valid.length, chunks: chunks.length, dist: im.dist, cols: extraCols.map(h => h.key), by: S.uid || null });
+    for (let k = 0; k < chunks.length; k++) {
+      await write(`batches/${listId}-${k}`, 'set', { list: listId, listName: name, idx: k, createdAt: now, leads: chunks[k] });
+      S.impBusy.done += Object.keys(chunks[k]).length; renderImportSummary();
+    }
+    S.impBusy = null; S.imp = null; renderImport();
+    toast(`Lista “${name}” importada: ${valid.length} leads.`);
+  } catch (e) {
+    S.impBusy = null; renderImportSummary();
+    toast(errMsg(e), { bad: true });
+  }
+}
+async function loadDemo() {
+  const names = ['Mariana Souza', 'João Pereira', 'Aline Martins', 'Carlos Eduardo Lima', 'Patrícia Gomes', 'Rafael Nunes', 'Juliana Rocha', 'Bruno Almeida'];
+  const cities = ['Curitiba', 'São Paulo', 'Londrina', 'Campinas', 'Joinville', 'Maringá', 'Santos', 'Blumenau'];
+  const now = Date.now(), listId = 'Lexemplo' + rid(4), leads = {};
+  names.forEach((n, i) => { leads[rid(8)] = { n: n + ' (exemplo)', p: '5500' + (900000001 + i), x: { Cidade: cities[i] }, o: i, s: 'p', a: null, ca: null }; });
+  try {
+    await write('lists/' + listId, 'set', { name: 'Lista de exemplo', createdAt: now, total: names.length, chunks: 1, dist: 'fila', cols: ['Cidade'], by: S.uid || null, demo: true });
+    await write(`batches/${listId}-0`, 'set', { list: listId, listName: 'Lista de exemplo', idx: 0, createdAt: now, leads });
+    toast('Lista de exemplo criada com 8 leads de mentira (DDD 00). Exclua em Configurar quando terminar de testar.', { ms: 9000 });
+  } catch (e) { toast(errMsg(e), { bad: true }); }
+}
+
+/* ---------- team & lists ---------- */
+async function addAttendant(name) {
+  name = name.replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (!name) return false;
+  if (activeAtts().some(a => norm(a.name) === norm(name))) { toast(`${name} já está na equipe.`, { bad: true }); return false; }
+  const id = 't' + rid(7);
+  try { await writeConfig({ attendants: { [id]: { name, active: true, c: Date.now() } } }); toast(`${name} entrou na equipe.`); return true; }
+  catch (e) { toast(errMsg(e), { bad: true }); return false; }
+}
+async function releaseAttendant(id) {
+  const by = new Map();
+  for (const l of S.leads) if (l.s === 'p' && l.a === id) { if (!by.has(l.chunk)) by.set(l.chunk, {}); by.get(l.chunk)[l.id] = { a: null, ca: null }; }
+  let n = 0;
+  for (const [cid, patch] of by) { await write('batches/' + cid, 'update', { leads: patch }); n += Object.keys(patch).length; }
+  return n;
+}
+async function deleteList(listId) {
+  const cids = Object.keys(S.chunks).filter(c => S.chunks[c].list === listId);
+  for (const c of cids) await write('batches/' + c, 'delete');
+  await write('lists/' + listId, 'delete');
+}
+
+/* ---------- CSV export ---------- */
+function csvCell(v) { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+async function exportCSV(rows, filename) {
+  if (!S.dl) return;
+  const extraKeys = [...new Set(rows.flatMap(l => Object.keys(l.x || {})))];
+  const head = ['Nome', 'Telefone', 'Lista', 'Situação', 'Atendente', 'Chamado em', 'Resultado', 'Observação', ...extraKeys];
+  const lines = [head.map(csvCell).join(';')];
+  for (const l of rows) {
+    const called = l.s === 'c';
+    lines.push([
+      l.n || '', fmtPhone(l.p), listNameOf(l),
+      called ? 'Chamado' : (l.a ? 'Na fila de atendente' : 'Livre'),
+      called ? attName(l.by) : (l.a ? attName(l.a) : ''),
+      called && l.at ? new Date(l.at).toLocaleString('pt-BR') : '',
+      called ? resOf(l.r).label : '', l.nt || '',
+      ...extraKeys.map(k => (l.x || {})[k] || '')
+    ].map(csvCell).join(';'));
+  }
+  try { await S.dl.save({ filename, data: '﻿' + lines.join('\r\n') }); toast('Planilha salva.'); }
+  catch (e) {
+    if (e && e.code === 'declined') return;
+    if (e && e.code === 'rate_limited') { toast('Já tem um download aberto. Conclua ele primeiro.'); return; }
+    toast('Não foi possível baixar a planilha agora.', { bad: true });
+  }
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+
+/* ================= events ================= */
+const ACTIONS = {
+  'choose-me': () => { S.choosing = true; if (S.tab !== 'chamar') setTab('chamar'); else update(); },
+  'cancel-choose': () => { S.choosing = false; update(); },
+  'set-me': t => { S.me = t.dataset.id; S.choosing = false; LS.set('cl_me', S.me); S.attSig = ''; update(); },
+  'goto': t => { setTab(t.dataset.go); const f = t.dataset.focus; if (f) setTimeout(() => $('#' + f)?.focus(), 50); },
+  'demo': () => loadDemo(),
+  'pull': () => pull(10),
+  'wa': t => { const l = S.byKey.get(t.dataset.k); if (l && !S.readonly) patchLead(l, { w: Date.now() }).catch(() => {}); },
+  'done': t => { const l = S.byKey.get(t.dataset.k); if (l) markCalled(l, 'enviado'); },
+  'nowa': t => { const l = S.byKey.get(t.dataset.k); if (l) markCalled(l, 'invalido'); },
+  'more-pend': () => { S.limit.pend += 150; update(); },
+  'more-called': () => { S.limit.called += 100; update(); },
+  'uncall': t => {
+    const l = S.byKey.get(t.dataset.k); if (!l) return;
+    const prev = { s: 'c', r: l.r || 'enviado', by: l.by, at: l.at };
+    patchLead(l, { s: 'p', r: null, by: null, at: null }).catch(e => toast(errMsg(e), { bad: true }));
+    toast(`${l.n || 'Lead'} voltou para a fila de ${attName(l.a || l.by)}.`, { action: { label: 'Desfazer', fn: () => patchLead(l, prev).catch(e => toast(errMsg(e), { bad: true })) } });
+  },
+  'note-edit': t => { S.editNote = t.dataset.k; update(); setTimeout(() => { const ta = document.getElementById('note-' + t.dataset.k); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } }, 30); },
+  'note-cancel': () => { S.editNote = null; update(); },
+  'note-save': t => {
+    const l = S.byKey.get(t.dataset.k); const ta = document.getElementById('note-' + t.dataset.k);
+    if (l && ta) patchLead(l, { nt: ta.value.trim().slice(0, 300) }).then(() => toast('Observação salva.')).catch(e => toast(errMsg(e), { bad: true }));
+    S.editNote = null; update();
+  },
+  'export-called': () => exportCSV(S.lastCalledRows || [], `leads-chamados-${stamp()}.csv`),
+  'export-all': () => exportCSV([...S.leads].sort((a, b) => (a.list || '').localeCompare(b.list || '') || (a.o || 0) - (b.o || 0)), `base-de-leads-${stamp()}.csv`),
+  'confirm': t => { S.confirm = t.dataset.c; update(); },
+  'confirm-no': () => { S.confirm = null; update(); },
+  'att-rm-yes': async t => {
+    const id = t.dataset.id; S.confirm = null; update();
+    try { const n = await releaseAttendant(id); await writeConfig({ attendants: { [id]: { active: false } } }); toast(`${attName(id)} saiu da equipe${n ? `; ${n} leads voltaram para a fila livre` : ''}.`); }
+    catch (e) { toast(errMsg(e), { bad: true }); }
+  },
+  'att-release': async t => {
+    try { const n = await releaseAttendant(t.dataset.id); toast(`${n} leads de ${attName(t.dataset.id)} voltaram para a fila livre.`); }
+    catch (e) { toast(errMsg(e), { bad: true }); }
+  },
+  'list-del-yes': async t => {
+    const id = t.dataset.id; S.confirm = null; update();
+    try { await deleteList(id); toast('Lista excluída.'); } catch (e) { toast(errMsg(e), { bad: true }); }
+  },
+  'var': t => {
+    const ta = $('#tpl-text'); const v = t.dataset.v;
+    const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? ta.value.length;
+    ta.value = ta.value.slice(0, s) + v + ta.value.slice(e); ta.focus(); ta.setSelectionRange(s + v.length, s + v.length);
+    S.tplDirty = true; $('#tpl-save').disabled = false; renderTplPreview();
+  },
+  'tpl-save': async () => {
+    const v = $('#tpl-text').value.trim().slice(0, 1000);
+    try { await writeConfig({ template: v }); S.tplDirty = false; $('#tpl-save').disabled = true; toast('Mensagem salva. Já vale para toda a equipe.'); }
+    catch (e) { toast(errMsg(e), { bad: true }); }
+  },
+  'tpl-reset': () => { $('#tpl-text').value = DEFAULT_TEMPLATE; S.tplDirty = true; $('#tpl-save').disabled = false; renderTplPreview(); },
+  'tpl-csv': async () => {
+    if (!S.dl) return;
+    try { await S.dl.save({ filename: 'modelo-lista-de-leads.csv', data: '﻿Nome;Telefone;Cidade;Interesse\r\nMaria da Silva;(41) 99876-5432;Curitiba;Plano mensal\r\n' }); }
+    catch (e) { if (!e || e.code !== 'declined') toast('Não foi possível baixar o modelo agora.', { bad: true }); }
+  },
+  'imp-reset': () => { S.imp = null; renderImport(); },
+  'imp-paste': () => {
+    const t = $('#imp-paste').value; if (!t.trim()) { toast('Cole as linhas da planilha na caixa primeiro.'); return; }
+    S.imp = null; setImportRows(parseDelimited(t), '');
+  },
+  'imp-go': () => doImport()
+};
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab],[data-action]'); if (!t) return;
+  if (t.dataset.tab) { setTab(t.dataset.tab); return; }
+  const fn = ACTIONS[t.dataset.action];
+  if (fn && t.tagName !== 'SELECT') fn(t, e);
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'q-pend') { S.q.pend = t.value; S.limit.pend = 150; renderChamar(); }
+  else if (t.id === 'q-called') { S.q.called = t.value; S.limit.called = 100; renderChamados(); }
+  else if (t.id === 'tpl-text') { S.tplDirty = true; $('#tpl-save').disabled = false; renderTplPreview(); }
+  else if (t.id === 'imp-name' && S.imp) { S.imp.listName = t.value; }
+  else if (t.id === 'imp-ddd' && S.imp) { S.imp.ddd = t.value.replace(/\D/g, ''); renderImportSummary(); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'opt-msg') { S.prefs.msg = t.checked; LS.set('cl_prefs', S.prefs); renderChamar(); }
+  else if (t.id === 'opt-open') { S.prefs.open = t.value; LS.set('cl_prefs', S.prefs); renderChamar(); }
+  else if (t.id === 'f-att') { S.f.att = t.value; S.limit.called = 100; renderChamados(); }
+  else if (t.id === 'f-res') { S.f.res = t.value; S.limit.called = 100; renderChamados(); }
+  else if (t.id === 'f-period') { S.f.period = t.value; S.limit.called = 100; renderChamados(); }
+  else if (t.dataset.action === 'result') {
+    const l = S.byKey.get(t.dataset.k); if (!l) return;
+    t.className = 'res-select t-' + resOf(t.value).tone;
+    patchLead(l, { r: t.value }).catch(err => toast(errMsg(err), { bad: true }));
+  }
+  else if (t.id === 'imp-file') { readFile(t.files && t.files[0]); t.value = ''; }
+  else if (S.imp) {
+    if (t.id === 'imp-col-name') { S.imp.colName = +t.value; renderImportSummary(); }
+    else if (t.id === 'imp-col-phone') { S.imp.colPhone = +t.value; renderImportSummary(); }
+    else if (t.id === 'imp-dedupe') { S.imp.dedupe = t.checked; renderImportSummary(); }
+    else if (t.id === 'imp-header') {
+      S.imp.header = t.checked;
+      const c = detectColumns(S.imp.rows, S.imp.header); S.imp.colName = c.name; S.imp.colPhone = c.phone; renderImport();
+    }
+    else if (t.name === 'dist') { S.imp.dist = t.value; $('#dist-to').hidden = t.value !== 'dividir'; renderImportSummary(); }
+    else if (t.dataset.distAtt) {
+      const id = t.dataset.distAtt; S.imp.distTo = S.imp.distTo.filter(x => x !== id); if (t.checked) S.imp.distTo.push(id); renderImportSummary();
+    }
+    else if (t.id === 'imp-sheet' && S.imp.wb) {
+      const rows = XLSX.utils.sheet_to_json(S.imp.wb.Sheets[t.value], { header: 1, raw: true, defval: '' });
+      const keep = { wb: S.imp.wb, sheets: S.imp.sheets, sheet: t.value }, fname = S.imp.fileName;
+      S.imp = null; setImportRows(rows, fname, { set: keep });
+    }
+  }
+});
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'att-form') return;
+  e.preventDefault();
+  const inp = $('#att-name'); const ok = await addAttendant(inp.value);
+  if (ok) { inp.value = ''; inp.focus(); }
+});
+document.addEventListener('dragover', e => { const d = e.target.closest && e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const d = e.target.closest && e.target.closest('#drop'); if (d) d.classList.remove('over'); });
+document.addEventListener('drop', e => {
+  const d = e.target.closest && e.target.closest('#drop'); if (!d) return;
+  e.preventDefault(); d.classList.remove('over');
+  readFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+});
+
+/* ================= boot ================= */
+function subscribe() {
+  const onErr = which => err => {
+    if (err && err.code === 'revoked') { S.fatal = 'Seu acesso a esta página mudou. Recarregue a página.'; schedule(); return; }
+    if (err && err.code === 'unavailable') { setTimeout(() => sub[which](), 1500 + Math.random() * 1500); return; }
+    S.fatal = 'Não foi possível carregar os dados agora. Recarregue a página.'; schedule();
+  };
+  const sub = {
+    config: () => S.db.doc('config/main').onSnapshot(s => {
+      S.configExists = s.exists;
+      const d = s.data() || {};
+      S.config = { attendants: d.attendants || {}, template: typeof d.template === 'string' ? d.template : DEFAULT_TEMPLATE };
+      S.ready.config = true; schedule();
+    }, onErr('config')),
+    lists: () => S.db.collection('lists').onSnapshot(q => {
+      const m = {}; q.docs.forEach(d => { m[d.id] = d.data(); }); S.lists = m;
+      S.ready.lists = true; schedule();
+    }, onErr('lists')),
+    batches: () => S.db.collection('batches').onSnapshot(q => {
+      const m = {}; q.docs.forEach(d => { m[d.id] = d.data(); }); S.chunks = m;
+      rebuild(); S.ready.batches = true; schedule();
+    }, onErr('batches'))
+  };
+  sub.config(); sub.lists(); sub.batches();
+}
+
+async function boot() {
+  const wanted = S.tab;
+  renderTabs(); mount();
+  if (!window.claude || typeof window.claude.use !== 'function') {
+    S.fatal = 'Abra esta página pelo link do Claude, com a sua conta, para ver e marcar os leads.'; update(); return;
+  }
+  const [db, user, dl] = await Promise.all([window.claude.use('db'), window.claude.use('user'), window.claude.use('downloads')]);
+  S.db = db; S.user = user; S.dl = dl;
+  if (!db) { S.fatal = 'Não consegui conectar ao banco de dados desta página. Entre com a sua conta Claude e abra o link de novo.'; update(); return; }
+  if (user) {
+    const [own, id, cw] = await Promise.all([user.isOwner(), user.id(), user.can('data.write')]);
+    S.isOwner = !!own; S.uid = id || null; S.readonly = cw === false;
+  }
+  if (wanted === 'config' && S.isOwner) S.tab = 'config';
+  renderTabs(); mount();
+  subscribe();
+}
+boot();
+})();
+</script>
