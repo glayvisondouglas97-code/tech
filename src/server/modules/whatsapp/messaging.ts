@@ -2,6 +2,7 @@
 import type { Kysely } from 'kysely';
 import type { Database, WaInstance, WaMessage } from '../../db/schema';
 import { AppError, conflict, notFound } from '../../lib/errors';
+import { markSentFromChat } from '../leads/service';
 import { EvolutionError, evolution } from './evolution';
 import { holdMedia, storeMedia } from './media';
 import type { WaMessage as RawMessage } from './parse';
@@ -31,7 +32,8 @@ export async function ensureConnected(db: Kysely<Database>, instance: WaInstance
 
 /**
  * Envia pelo mesmo número da conversa, grava a mensagem (e o arquivo, se houver) e marca como lidas
- * no WhatsApp as mensagens do contato que foram respondidas.
+ * no WhatsApp as mensagens do contato que foram respondidas. Se a conversa foi aberta pelo "Chamar"
+ * de um lead da fila de quem enviou, o lead fica "Chamado · Mensagem enviada".
  */
 export async function sendToConversation(
   db: Kysely<Database>,
@@ -44,7 +46,7 @@ export async function sendToConversation(
     .selectFrom('wa_conversations as c')
     .innerJoin('wa_contacts as ct', 'ct.id', 'c.contact_id')
     .innerJoin('wa_instances as i', 'i.id', 'c.instance_id')
-    .select(['c.id', 'c.instance_id', 'ct.phone_jid', 'ct.lid_jid'])
+    .select(['c.id', 'c.instance_id', 'c.lead_id', 'ct.phone_jid', 'ct.lid_jid'])
     .where('c.id', '=', conversationId)
     .executeTakeFirst();
   if (!conversation) throw notFound('Conversa não encontrada.');
@@ -98,6 +100,16 @@ export async function sendToConversation(
     if (media) {
       message = await storeMedia(db, message, media.data, media.mime);
       stored?.resolve(message);
+    }
+
+    if (conversation.lead_id) {
+      await markSentFromChat(db, conversation.lead_id, userId, instance.nickname ?? instance.name).catch(
+        (error) =>
+          console.error(
+            `[envio] não foi possível marcar o lead ${conversation.lead_id} como chamado:`,
+            (error as Error).message,
+          ),
+      );
     }
 
     markRepliedAsRead(db, instance.name, conversation.id, conversation.phone_jid, message.id).catch((error) =>

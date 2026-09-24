@@ -3,14 +3,19 @@
  * 1. Postgres: TEST_DATABASE_URL (CI) ou o Postgres local de testes (tests/.tmp/e2e-pg).
  * 2. npm run build (interface + servidor).
  * 3. Cria a gestora com o comando de produção criar-admin.
- * 4. Sobe dist/server/index.js na porta 4310.
+ * 4. Sobe uma Evolution de mentira (tests/fake-evolution.ts) para o WhatsApp do sistema.
+ * 5. Sobe dist/server/index.js na porta 4310.
  */
 import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import pg from 'pg';
 import { startLocalPostgres } from '../../scripts/local-postgres';
+import { startFakeEvolution } from '../fake-evolution';
 
 export const E2E_ADMIN = { name: 'Gestora E2E', email: 'gestora@e2e.teste', password: 'senha-e2e-123' };
+/** Mesmo valor em fluxo-principal.spec.ts, que simula os webhooks da Evolution. */
+const E2E_WEBHOOK_TOKEN = 'token-do-webhook-e2e';
 const PORT = 4310;
 const DB = 'chamador_e2e';
 
@@ -45,6 +50,11 @@ else
     shell: true,
   });
 
+const evolution = await startFakeEvolution();
+const mediaDir = resolve('tests/.tmp/e2e-media');
+rmSync(mediaDir, { recursive: true, force: true });
+mkdirSync(mediaDir, { recursive: true });
+
 const env = {
   ...process.env,
   NODE_ENV: 'production',
@@ -54,6 +64,11 @@ const env = {
   APP_URL: `http://127.0.0.1:${PORT}`,
   JOBS_ENABLED: 'false',
   LOG_LEVEL: 'warn',
+  EVOLUTION_URL: evolution.url,
+  EVOLUTION_API_KEY: 'chave-e2e',
+  WEBHOOK_URL: `http://127.0.0.1:${PORT}/webhook/evolution`,
+  WEBHOOK_TOKEN: E2E_WEBHOOK_TOKEN,
+  MEDIA_DIR: mediaDir,
 };
 execFileSync(
   node,
@@ -72,6 +87,7 @@ execFileSync(
 const server = spawn(node, ['dist/server/index.js'], { stdio: 'inherit', env });
 async function shutdown() {
   server.kill();
+  await evolution.close().catch(() => {});
   await stopPg().catch(() => {});
   process.exit(0);
 }

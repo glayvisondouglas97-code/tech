@@ -53,8 +53,7 @@ describe('fluxo do atendente', () => {
     expect(byPhone.items.map((l: LeadItem) => l.id)).toEqual([lead.id]);
   });
 
-  it('abre o WhatsApp, marca como chamado, desfaz e chama de novo, sem perder histórico', async () => {
-    expect((await ana.post(`/api/leads/${lead.id}/whatsapp`)).json()).toEqual({ ok: true, warning: null });
+  it('marca como chamado, desfaz e chama de novo, sem perder histórico', async () => {
     const called = await ana.post(`/api/leads/${lead.id}/call`, { result: 'enviado' });
     expect(called.statusCode).toBe(200);
     expect(called.json()).toMatchObject({
@@ -77,7 +76,6 @@ describe('fluxo do atendente', () => {
     // Histórico completo, do mais antigo para o mais novo: nada se perde ao desfazer e chamar de novo.
     expect(d.events.map((e) => e.type).reverse()).toEqual([
       'pegou',
-      'abriu_whatsapp',
       'chamado',
       'desfeito',
       'chamado',
@@ -200,15 +198,11 @@ describe('fluxo do atendente', () => {
     expect(after).toEqual({ status: 'pendente', assigned_to: null });
   });
 
-  it('avisa quando o atendente abre conversas rápido demais', async () => {
-    await t.db.updateTable('settings').set({ hourly_contact_warning: 3 }).execute();
+  it('sem a Evolution configurada, o "Chamar" pelo sistema avisa em vez de quebrar', async () => {
     const q = (await bruno.get('/api/queue')).json();
-    const results = [];
-    for (const l of q.items.slice(0, 3))
-      results.push((await bruno.post(`/api/leads/${l.id}/whatsapp`)).json());
-    expect(results[0].warning).toBeNull();
-    expect(results[2].warning).toMatch(/3 conversas na última hora/);
-    await t.db.updateTable('settings').set({ hourly_contact_warning: 60 }).execute();
+    const r = await bruno.post(`/api/leads/${q.items[0].id}/conversation`, { instanceId: 1 });
+    expect(r.statusCode).toBe(409);
+    expect(r.json().error).toMatch(/WhatsApp não está configurado/);
   });
 });
 

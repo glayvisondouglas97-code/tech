@@ -40,7 +40,7 @@ describe('atendente não vê nem altera leads de outro atendente (nem pela API)'
   it('detalhe, ações e edição devolvem 404', async () => {
     for (const id of [brunoLead, brunoCalled, freeLead]) {
       expect((await ana.get(`/api/leads/${id}`)).statusCode, `GET ${id}`).toBe(404);
-      expect((await ana.post(`/api/leads/${id}/whatsapp`)).statusCode).toBe(404);
+      expect((await ana.get(`/api/leads/${id}/conversations`)).statusCode).toBe(404);
       expect((await ana.post(`/api/leads/${id}/call`, { result: 'enviado' })).statusCode).toBe(404);
       expect((await ana.post(`/api/leads/${id}/undo`)).statusCode).toBe(404);
       expect((await ana.post(`/api/leads/${id}/requeue`, { to: 'minha' })).statusCode).toBe(404);
@@ -97,7 +97,6 @@ describe('atendente não vê nem altera leads de outro atendente (nem pela API)'
           defaultDdd: null,
         },
       ],
-      ['POST', '/api/templates', { name: 'X', body: 'Y' }],
       ['GET', '/api/blocklist'],
       ['POST', '/api/blocklist', { phone: '41999999999' }],
       ['GET', '/api/lists'],

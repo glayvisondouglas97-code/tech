@@ -2,8 +2,8 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { Dashboard, DddCount, LeadItem, PullResult, QueueResponse } from '../../shared/api';
-import { fillTemplate } from '../../shared/template';
 import { CallDialog } from '../components/CallDialog';
+import { ChatButton } from '../components/ChatButton';
 import {
   IconArrowRight,
   IconBlock,
@@ -25,12 +25,11 @@ import { LeadDrawer } from '../components/LeadDrawer';
 import { useQueueStats, useTopbarCenter } from '../components/Shell';
 import { useToast } from '../components/Toasts';
 import { Confirm, copyText, Empty, hue, Menu, Skeleton } from '../components/ui';
-import { WhatsAppLink } from '../components/WhatsAppLink';
 import { api, errorMessage, qs } from '../lib/api';
 import { fmtN, fmtWhen, plural } from '../lib/format';
 import { useDebounced, useShortcuts } from '../lib/hooks';
-import { companyInitials, leadLabel, leadPartner, useLeadActions, useMessageText } from '../lib/leads';
-import { useLocalFlag, usePrefs } from '../lib/prefs';
+import { companyInitials, leadLabel, leadPartner, useLeadActions } from '../lib/leads';
+import { useLocalFlag } from '../lib/prefs';
 import { useMe, useSession } from '../lib/session';
 
 function greeting() {
@@ -61,20 +60,10 @@ interface RowHandlers {
   onOptOut: (l: LeadItem) => void;
 }
 
-function LeadRow({
-  lead,
-  templateId,
-  h,
-}: {
-  lead: LeadItem;
-  templateId: string | 'none' | null;
-  h: RowHandlers;
-}) {
+function LeadRow({ lead, h }: { lead: LeadItem; h: RowHandlers }) {
   const toast = useToast();
-  const message = useMessageText();
   const copy = async (text: string, what: string) =>
     toast((await copyText(text)) ? `${what} copiado.` : 'Não deu para copiar.');
-  const text = message(lead, templateId);
   return (
     <li className={`lead${lead.whatsappOpenedAt ? ' opened' : ''}`}>
       <span
@@ -110,10 +99,10 @@ function LeadRow({
         {lead.note && <div className="note-text">{lead.note}</div>}
       </div>
       <div className="lead-act">
-        <WhatsAppLink lead={lead} templateId={templateId} className="btn btn-wa">
+        <ChatButton lead={lead} className="btn btn-wa">
           <IconChat />
           Chamar no WhatsApp
-        </WhatsAppLink>
+        </ChatButton>
         <button
           type="button"
           className="btn btn-line btn-done"
@@ -142,11 +131,6 @@ function LeadRow({
           <button type="button" role="menuitem" onClick={() => copy(lead.phoneDisplay, 'Número')}>
             <IconCopy /> Copiar número
           </button>
-          {text && (
-            <button type="button" role="menuitem" onClick={() => copy(text, 'Texto da mensagem')}>
-              <IconCopy /> Copiar mensagem pronta
-            </button>
-          )}
           <button type="button" role="menuitem" onClick={() => h.onRelease(lead)}>
             <IconUndo /> Devolver à fila livre
           </button>
@@ -160,15 +144,7 @@ function LeadRow({
   );
 }
 
-function CallbackRow({
-  lead,
-  templateId,
-  h,
-}: {
-  lead: LeadItem;
-  templateId: string | 'none' | null;
-  h: RowHandlers;
-}) {
+function CallbackRow({ lead, h }: { lead: LeadItem; h: RowHandlers }) {
   const overdue = lead.callbackAt ? Date.parse(lead.callbackAt) < Date.now() : false;
   return (
     <li className={`lead${overdue ? ' overdue' : ''}`}>
@@ -193,10 +169,10 @@ function CallbackRow({
         {lead.note && <div className="note-text">{lead.note}</div>}
       </div>
       <div className="lead-act">
-        <WhatsAppLink lead={lead} templateId={templateId} className="btn btn-wa btn-sm">
+        <ChatButton lead={lead} className="btn btn-wa btn-sm">
           <IconChat size={16} />
           Chamar
-        </WhatsAppLink>
+        </ChatButton>
         <button type="button" className="btn btn-line btn-sm" onClick={() => h.onDialog(lead)}>
           Registrar retorno
         </button>
@@ -207,36 +183,24 @@ function CallbackRow({
 
 function FocusMode({
   items,
-  templateId,
   h,
   onExit,
   pullButton,
 }: {
   items: LeadItem[];
-  templateId: string | 'none' | null;
   h: RowHandlers;
   onExit: () => void;
   pullButton: React.ReactNode;
 }) {
-  const me = useMe();
   const { config } = useSession();
   const [pos, setPos] = useState(0);
   const waRef = useRef<HTMLSpanElement>(null);
   const lead = items[Math.min(pos, Math.max(0, items.length - 1))];
   const index = lead ? items.indexOf(lead) : 0;
-  const templates = config?.templates ?? [];
-  const tpl =
-    templateId === 'none'
-      ? null
-      : (templates.find((t) => t.id === templateId) ?? templates.find((t) => t.isDefault));
-  const preview =
-    lead && tpl
-      ? fillTemplate(tpl.body, { name: lead.name, company: lead.company, extra: lead.extra }, me.name)
-      : '';
 
   useShortcuts({
-    w: () => waRef.current?.querySelector('a')?.click(),
-    Enter: () => waRef.current?.querySelector('a')?.click(),
+    w: () => waRef.current?.querySelector('button')?.click(),
+    Enter: () => waRef.current?.querySelector('button')?.click(),
     c: () => lead && h.onMark(lead),
     s: () => lead && h.onNoWa(lead),
     r: () => lead && h.onDialog(lead),
@@ -265,8 +229,13 @@ function FocusMode({
         </span>
         <div className="row">
           <span className="sub small kbd-hint">
-            Atalhos: <kbd>W</kbd> WhatsApp · <kbd>C</kbd> chamado · <kbd>S</kbd> sem WhatsApp · <kbd>R</kbd>{' '}
-            resultado · <kbd>P</kbd> pular
+            Atalhos:{' '}
+            {config?.whatsapp && (
+              <>
+                <kbd>W</kbd> chamar ·{' '}
+              </>
+            )}
+            <kbd>C</kbd> chamado · <kbd>S</kbd> sem WhatsApp · <kbd>R</kbd> resultado · <kbd>P</kbd> pular
           </span>
           <button type="button" className="btn btn-line btn-sm" onClick={onExit}>
             Sair do modo foco <kbd>Esc</kbd>
@@ -297,18 +266,12 @@ function FocusMode({
           </div>
         )}
         {lead.note && <div className="note-text">{lead.note}</div>}
-        {preview && (
-          <div>
-            <p className="eyebrow">Mensagem que vai pronta</p>
-            <div className="bubble mt8">{preview}</div>
-          </div>
-        )}
         <div className="focus-actions">
           <span ref={waRef} style={{ display: 'contents' }}>
-            <WhatsAppLink lead={lead} templateId={templateId} className="btn btn-wa btn-lg">
+            <ChatButton lead={lead} className="btn btn-wa btn-lg">
               <IconChat />
               Chamar no WhatsApp <kbd>W</kbd>
-            </WhatsAppLink>
+            </ChatButton>
           </span>
           <button
             type="button"
@@ -374,11 +337,9 @@ function Onboarding() {
 
 export function QueuePage() {
   const me = useMe();
-  const { config } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
   const actions = useLeadActions();
-  const [prefs, setPrefs] = usePrefs();
   const [focus, setFocus] = useLocalFlag('cl_focus', false);
   const [search, setSearch] = useState('');
   const q = useDebounced(search.trim(), 250);
@@ -404,14 +365,6 @@ export function QueuePage() {
     queryFn: () => api<DddCount[]>('/queue/ddds'),
     refetchInterval: 30_000,
   });
-
-  const templates = config?.templates ?? [];
-  const templateId =
-    prefs.templateId === 'none'
-      ? 'none'
-      : (templates.find((t) => t.id === prefs.templateId)?.id ??
-        templates.find((t) => t.isDefault)?.id ??
-        'none');
 
   const s = stats.data;
   const room = s && s.maxQueue > 0 ? Math.max(0, s.maxQueue - s.minhaFila) : Number.POSITIVE_INFINITY;
@@ -616,7 +569,7 @@ export function QueuePage() {
           </h2>
           <ul className="leads">
             {dueCallbacks.map((l) => (
-              <CallbackRow key={l.id} lead={l} templateId={templateId} h={handlers} />
+              <CallbackRow key={l.id} lead={l} h={handlers} />
             ))}
           </ul>
           {laterCallbacks > 0 && (
@@ -674,23 +627,6 @@ export function QueuePage() {
               </option>
             ))}
           </select>
-          <label className="vh" htmlFor="tpl-pick">
-            Mensagem pronta
-          </label>
-          <select
-            id="tpl-pick"
-            className="select"
-            value={templateId}
-            onChange={(e) => setPrefs({ templateId: e.target.value })}
-            title="Mensagem que já vai escrita no WhatsApp"
-          >
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                Mensagem: {t.name}
-              </option>
-            ))}
-            <option value="none">Sem mensagem pronta</option>
-          </select>
           <button
             type="button"
             className={`btn btn-sm hide-lg ${focus ? 'btn-primary' : 'btn-line'}`}
@@ -706,13 +642,7 @@ export function QueuePage() {
       {queue.isLoading ? (
         <Skeleton rows={5} />
       ) : focus ? (
-        <FocusMode
-          items={items}
-          templateId={templateId}
-          h={handlers}
-          onExit={() => setFocus(false)}
-          pullButton={pullButton}
-        />
+        <FocusMode items={items} h={handlers} onExit={() => setFocus(false)} pullButton={pullButton} />
       ) : items.length === 0 ? (
         <ul className="leads">
           <li style={{ listStyle: 'none' }}>
@@ -739,7 +669,7 @@ export function QueuePage() {
       ) : (
         <ul className="leads">
           {items.map((l) => (
-            <LeadRow key={l.id} lead={l} templateId={templateId} h={handlers} />
+            <LeadRow key={l.id} lead={l} h={handlers} />
           ))}
           {(queue.data?.total ?? 0) > items.length && (
             <li className="more">

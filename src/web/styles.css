@@ -4865,3 +4865,141 @@ dialog.dlg:has(.wa-qr-layout) {
     padding: 16px;
   }
 }
+
+/* ---------- Chamar pelo WhatsApp do sistema ---------- */
+/* Janela "Por qual número?" */
+.num-pick {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.num-opt {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease),
+    background 0.15s var(--ease);
+}
+.num-opt > i {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--wa-color, var(--muted));
+}
+.num-opt:hover:not(:disabled),
+.num-opt:focus-visible {
+  border-color: color-mix(in srgb, var(--wa-color) 55%, var(--line));
+  background: color-mix(in srgb, var(--wa-color) 7%, var(--surface));
+}
+.num-opt:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wa-color) 60%, transparent);
+  outline-offset: 2px;
+}
+.num-opt:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.num-opt[aria-busy="true"] {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--wa-color) 55%, var(--line));
+}
+.num-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.num-main b,
+.num-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.num-main small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.num-opt kbd {
+  flex: none;
+}
+.num-spin {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.num-loading {
+  display: grid;
+  place-items: center;
+  min-height: 80px;
+}
+
+/* Faixa do lead no alto da conversa */
+.wa-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.wa-lead-ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+}
+.wa-lead-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.wa-lead-info {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.wa-lead .btn {
+  flex: none;
+}
+@media (max-width: 1023.98px) {
+  .wa-lead {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  .wa-lead-ic {
+    display: none;
+  }
+  .wa-lead-btn-text {
+    display: none;
+  }
+  /* No celular, a seta do alto do chat já volta para a fila; a lista fica na ficha do lead. */
+  .wa-lead-back,
+  .wa-lead-list {
+    display: none;
+  }
+}

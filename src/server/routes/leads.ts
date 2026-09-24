@@ -14,7 +14,6 @@ import {
   listLeads,
   markCalled,
   markSchema,
-  markWhatsappOpened,
   optOut,
   optOutSchema,
   parseLeadId,
@@ -63,11 +62,6 @@ export async function leadRoutes(app: FastifyInstance) {
   app.get('/leads/:id', async (req) => {
     const user = requireUser(req);
     return getLeadDetail(db, user, parseLeadId((req.params as { id: string }).id));
-  });
-
-  app.post('/leads/:id/whatsapp', async (req) => {
-    const user = requireUser(req);
-    return markWhatsappOpened(db, user, parseLeadId((req.params as { id: string }).id));
   });
 
   app.post('/leads/:id/call', async (req) => {

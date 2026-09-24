@@ -114,15 +114,6 @@ export async function seedDemo(
     (typeof users)[number],
   ];
 
-  await db
-    .insertInto('message_templates')
-    .values({
-      name: 'Retorno',
-      body: 'Oi, {nome}! Aqui é {atendente} de novo. Conseguiu pensar sobre o {interesse}? Estou à disposição.',
-      sort: 1,
-    })
-    .execute();
-
   const DAY = 86_400_000;
   const now = Date.now();
   let phoneSeq = 1;

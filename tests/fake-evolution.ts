@@ -4,11 +4,24 @@ import { createServer, type Server } from 'node:http';
 export interface FakeEvolution {
   url: string;
   calls: { method: string; url: string; apikey: string | undefined; body: unknown }[];
+  /** Números (instâncias) que respondem como desconectados. */
+  closed: Set<string>;
   close: () => Promise<void>;
+}
+
+/**
+ * Conferência de número (/chat/whatsappNumbers): final 9999 = sem WhatsApp; final 8888 = conta antiga,
+ * registrada sem o 9º dígito (a Evolution devolve o jid certo, sem o 9).
+ */
+function checkNumber(number: string) {
+  if (number.endsWith('9999')) return { jid: `${number}@s.whatsapp.net`, exists: false, number };
+  const jid = number.endsWith('8888') ? `${number.slice(0, 4)}${number.slice(5)}` : number;
+  return { jid: `${jid}@s.whatsapp.net`, exists: true, number };
 }
 
 export async function startFakeEvolution(): Promise<FakeEvolution> {
   const calls: FakeEvolution['calls'] = [];
+  const closed = new Set<string>();
   let n = 0;
   const sent = (number: string, message: Record<string, unknown>, messageType: string) => ({
     key: {
@@ -33,7 +46,15 @@ export async function startFakeEvolution(): Promise<FakeEvolution> {
       res.end(JSON.stringify(data));
     };
     if (url === '/instance/fetchInstances') return json(200, []);
-    if (url.startsWith('/instance/connectionState/')) return json(200, { instance: { state: 'open' } });
+    if (url.startsWith('/instance/connectionState/')) {
+      const name = decodeURIComponent(url.split('/').pop() ?? '');
+      return json(200, { instance: { state: closed.has(name) ? 'close' : 'open' } });
+    }
+    if (url.startsWith('/chat/whatsappNumbers/'))
+      return json(
+        200,
+        (body.numbers as string[]).map((number) => checkNumber(String(number))),
+      );
     if (url === '/instance/create') return json(201, { instance: { instanceName: body.instanceName } });
     if (url.startsWith('/instance/connect/'))
       return json(200, { base64: 'data:image/png;base64,AAAA', count: 1 });
@@ -61,6 +82,7 @@ export async function startFakeEvolution(): Promise<FakeEvolution> {
   return {
     url: `http://127.0.0.1:${port}`,
     calls,
+    closed,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

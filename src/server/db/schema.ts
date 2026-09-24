@@ -62,16 +62,6 @@ export interface SettingsTable {
   updated_by: string | null;
 }
 
-export interface MessageTemplatesTable {
-  id: Generated<string>;
-  name: string;
-  body: string;
-  is_default: Generated<boolean>;
-  sort: Generated<number>;
-  created_at: Generated<Date>;
-  updated_at: Generated<Date>;
-}
-
 export interface ListsTable {
   id: Generated<string>;
   name: string;
@@ -208,9 +198,12 @@ export interface WaConversationsTable {
   unread_count: Generated<number>;
   /** O contato já mandou alguma mensagem (aba "Responderam"). */
   lead_replied: Generated<boolean>;
-  last_message_at: Timestamp;
+  /** Vazio enquanto a conversa não tem mensagens (aberta pelo "Chamar" do lead, ainda sem nada enviado). */
+  last_message_at: NullableTimestamp;
   last_message_preview: string | null;
   last_message_from_me: Generated<boolean>;
+  /** Lead chamado por esta conversa (marca sozinho "Mensagem enviada" e "Respondeu"). */
+  lead_id: number | null;
   created_at: Generated<Date>;
 }
 
@@ -242,7 +235,6 @@ export interface Database {
   sessions: SessionsTable;
   password_tokens: PasswordTokensTable;
   settings: SettingsTable;
-  message_templates: MessageTemplatesTable;
   lists: ListsTable;
   leads: LeadsTable;
   lead_events: LeadEventsTable;

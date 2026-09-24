@@ -558,6 +558,108 @@ export async function markWhatsappOpened(db: Db, user: AuthUser, id: number): Pr
   return { ok: true, warning };
 }
 
+// ---------------------------------------------------------------- WhatsApp pelo sistema
+
+/** Lead que o usuário pode chamar pelo WhatsApp do sistema (mesma regra de visibilidade das outras telas). */
+export async function leadForChat(
+  db: Db,
+  user: AuthUser,
+  id: number,
+): Promise<{ id: number; phone: string }> {
+  const lead = await db
+    .selectFrom('leads')
+    .select(['id', 'phone', 'status', 'assigned_to', 'called_by', 'anonymized_at'])
+    .where('id', '=', id)
+    .executeTakeFirst();
+  if (!lead || !canSee(user, lead)) throw notFound(NOT_FOUND);
+  if (lead.anonymized_at) throw conflict('Este lead foi anonimizado.');
+  if (lead.status === 'bloqueado') throw conflict('Este número está na lista de não contatar.');
+  return { id: lead.id, phone: lead.phone };
+}
+
+/**
+ * Primeira mensagem enviada pelo sistema na conversa do lead: ele sai da fila de quem enviou e fica
+ * "Chamado · Mensagem enviada". Só vale para o lead que está na fila de quem enviou.
+ */
+export async function markSentFromChat(
+  db: Db,
+  leadId: number,
+  userId: string,
+  numberLabel: string,
+): Promise<boolean> {
+  return db.transaction().execute(async (trx) => {
+    const lead = await trx
+      .selectFrom('leads')
+      .select(['status', 'assigned_to', 'anonymized_at'])
+      .where('id', '=', leadId)
+      .forUpdate()
+      .executeTakeFirst();
+    if (lead?.status !== 'pendente' || lead.assigned_to !== userId || lead.anonymized_at) {
+      return false;
+    }
+    await trx
+      .updateTable('leads')
+      .set({
+        status: 'chamado',
+        called_by: userId,
+        called_at: sql`now()`,
+        result: 'enviado',
+        callback_at: null,
+        version: sql`version + 1`,
+        updated_at: sql`now()`,
+      })
+      .where('id', '=', leadId)
+      .execute();
+    await addEvents(trx, [
+      {
+        leadId,
+        userId,
+        type: 'chamado',
+        data: { resultado: 'enviado', automatico: true, numero: numberLabel },
+      },
+    ]);
+    return true;
+  });
+}
+
+/** Resultados que passam sozinhos para "Respondeu" quando o lead responde pelo WhatsApp. */
+const WAITING_REPLY: ResultId[] = ['enviado', 'nao_respondeu'];
+
+/** O lead respondeu na conversa ligada a ele: "Mensagem enviada" (ou "não respondeu") vira "Respondeu". */
+export async function markRepliedFromChat(db: Db, leadId: number, text: string | null): Promise<boolean> {
+  return db.transaction().execute(async (trx) => {
+    const lead = await trx
+      .selectFrom('leads')
+      .select(['status', 'result', 'anonymized_at'])
+      .where('id', '=', leadId)
+      .forUpdate()
+      .executeTakeFirst();
+    if (
+      lead?.status !== 'chamado' ||
+      !lead.result ||
+      !WAITING_REPLY.includes(lead.result) ||
+      lead.anonymized_at
+    ) {
+      return false;
+    }
+    await trx
+      .updateTable('leads')
+      .set({ result: 'respondeu', version: sql`version + 1`, updated_at: sql`now()` })
+      .where('id', '=', leadId)
+      .execute();
+    await addEvents(trx, [
+      { leadId, userId: null, type: 'whatsapp_resposta', data: { texto: text?.slice(0, 500) ?? null } },
+      {
+        leadId,
+        userId: null,
+        type: 'resultado',
+        data: { de: lead.result, para: 'respondeu', automatico: true },
+      },
+    ]);
+    return true;
+  });
+}
+
 export const optOutSchema = z.object({ reason: z.string().trim().max(200).optional() });
 
 /** "Não quero mais contato": bloqueia o número (LGPD) e tira da fila todos os leads com ele. */

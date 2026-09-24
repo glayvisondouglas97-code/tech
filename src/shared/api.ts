@@ -19,13 +19,6 @@ export interface SessionInfo {
   csrfToken: string;
 }
 
-export interface MessageTemplate {
-  id: string;
-  name: string;
-  body: string;
-  isDefault: boolean;
-}
-
 /** Configuração que todo usuário logado recebe. */
 export interface AppConfig {
   companyName: string;
@@ -33,7 +26,6 @@ export interface AppConfig {
   pullSize: number;
   maxQueue: number;
   hourlyContactWarning: number;
-  templates: MessageTemplate[];
   /** WhatsApp pela Evolution ligado (conversas e números). */
   whatsapp?: boolean;
 }

@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 a 7 concluídas. Fase 8 (junção com o Chamador de Leads) entregue, aguardando teste.**
+Status: **Fases 1 a 8 concluídas. Fase 9 (botão Chamar pelo sistema) entregue, aguardando teste.**
 
 > A partir da Fase 8, a Central virou parte do **Chamador de Leads** (Fastify + Kysely). As seções 3, 4.1 a 4.6
 > descrevem como cada parte foi pensada; onde falam em Express, Prisma, `backend/`, `frontend/`, `node src/cli.ts` ou
@@ -238,6 +238,21 @@ por número em `src/server/modules/whatsapp/realtime.ts`.
   últimos 14 dias é importado de novo sozinho.
 - Saiu também o webhook da WhatsApp Business Cloud API que o Chamador tinha (desligado), porque o WhatsApp agora é pela
   Evolution.
+
+## 4.8 Como a Fase 9 (Chamar pelo sistema) funciona
+
+- **Botão Chamar no WhatsApp** (fila, modo foco com a tecla **W**, retornos, Já chamados e ficha do lead): abre a janela
+  **Por qual número?** com todos os números (desconectados apagados, atalhos 1 a 9, o último usado em foco e o selo
+  "Já conversou" no número em que já existe conversa com o lead).
+- Ao escolher, o backend (`POST /api/leads/:id/conversation`) confere se o número está conectado, pergunta à Evolution se
+  o telefone do lead tem WhatsApp (`POST /chat/whatsappNumbers/{instância}`, conferida no código da v2.3.7), cria ou
+  reaproveita o contato e a conversa (pela fila única, como os webhooks) e liga a conversa ao lead. Sem WhatsApp, a
+  janela oferece **Marcar como Sem WhatsApp**.
+- A tela vai para `/conversas/:id` com a caixa de texto vazia (aba **Todas**). A faixa do lead mostra situação, sócio e
+  lista, com **Ver lead** e **Voltar para a fila**.
+- **Marcação automática**: a primeira mensagem enviada pelo sistema deixa o lead "Chamado · Mensagem enviada" (se ele está
+  na fila de quem enviou); a resposta do lead passa para "Respondeu". Tudo fica no histórico do lead.
+- **Saíram** o link `wa.me`, as mensagens prontas (tela, rotas e tabela) e a rota `POST /api/leads/:id/whatsapp`.
 
 ## 5. Decisões tomadas
 

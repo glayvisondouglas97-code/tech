@@ -1,7 +1,7 @@
 import { type CSSProperties, memo, type UIEvent, useMemo } from 'react';
 import type { ConversationItem, ConversationTab, InstanceInfo } from '../../../shared/conversations';
 import { useRealtimeOnline } from '../../lib/socket';
-import { contactName, formatPhone, instanceColor, instanceLabel, listTime } from '../../lib/whatsapp';
+import { conversationTitle, formatPhone, instanceColor, instanceLabel, listTime } from '../../lib/whatsapp';
 import { IconConversas, IconSearch, IconWifiOff, IconX } from '../Icons';
 import { Empty } from '../ui';
 import { ContactAvatar } from './ContactAvatar';
@@ -190,10 +190,10 @@ const ConversationRow = memo(function ConversationRow({
       aria-current={selected || undefined}
       onClick={() => onSelect(c.id)}
     >
-      <ContactAvatar name={c.contact.name} />
+      <ContactAvatar name={c.lead?.label ?? c.contact.name} />
       <span className="wa-row-main">
         <span className="wa-row-top">
-          <span className="wa-row-name">{contactName(c.contact)}</span>
+          <span className="wa-row-name">{conversationTitle(c)}</span>
           <span className="wa-row-time">{listTime(c.lastMessageAt)}</span>
         </span>
         <span className="wa-row-mid">
@@ -215,7 +215,7 @@ const ConversationRow = memo(function ConversationRow({
             <i aria-hidden="true" />
             {label}
           </span>
-          {c.contact.name && c.contact.phone && (
+          {(c.contact.name || c.lead) && c.contact.phone && (
             <span className="wa-row-phone">{formatPhone(c.contact.phone)}</span>
           )}
         </span>

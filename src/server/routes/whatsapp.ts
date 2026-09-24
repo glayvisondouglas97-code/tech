@@ -7,11 +7,13 @@ import { MAX_UPLOAD_BYTES } from '../../shared/conversations';
 import { requirePermission, requireUser } from '../http/auth-hooks';
 import { parse } from '../http/validation';
 import { audit } from '../lib/audit';
-import { AppError, badRequest, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
+import { leadForChat, parseLeadId } from '../modules/leads/service';
 import { conversationDto, conversationsQuery, instanceDto, messageDto } from '../modules/whatsapp/dto';
 import { evolution } from '../modules/whatsapp/evolution';
 import { importHistory } from '../modules/whatsapp/history';
 import { nextInstanceName } from '../modules/whatsapp/instances';
+import { startLeadChat } from '../modules/whatsapp/leads';
 import { baseMime, ensureMedia, isInline, isMediaMessage, mediaFile } from '../modules/whatsapp/media';
 import { evolutionFailure, sendToConversation } from '../modules/whatsapp/messaging';
 import { publishConversation, publishInstance } from '../modules/whatsapp/realtime';
@@ -131,6 +133,34 @@ export async function whatsappRoutes(app: FastifyInstance) {
     return importHistory(db, instance.name).catch((e) => evolutionFailure(e, 'Não foi possível importar'));
   });
 
+  // ---------- chamar um lead pelo WhatsApp do sistema ----------
+
+  const requireWhatsapp = () => {
+    if (!app.config.EVOLUTION_URL) throw conflict('O WhatsApp não está configurado neste servidor.');
+  };
+
+  // Abre a conversa com o lead pelo número escolhido (confere antes se o lead tem WhatsApp).
+  app.post('/leads/:id/conversation', async (req) => {
+    const user = requireUser(req);
+    requireWhatsapp();
+    const leadId = parseLeadId((req.params as { id: string }).id);
+    const { instanceId } = parse(z.object({ instanceId: idSchema }), req.body ?? {});
+    return startLeadChat(db, user, leadId, instanceId);
+  });
+
+  // Conversas já abertas com o lead (a janela de escolha do número mostra por qual número já se falou).
+  app.get('/leads/:id/conversations', async (req) => {
+    const user = requireUser(req);
+    const lead = await leadForChat(db, user, parseLeadId((req.params as { id: string }).id));
+    const rows = await db
+      .selectFrom('wa_conversations')
+      .select(['id', 'instance_id'])
+      .where('lead_id', '=', lead.id)
+      .orderBy('last_message_at', (ob) => ob.desc().nullsLast())
+      .execute();
+    return rows.map((r) => ({ id: r.id, instanceId: r.instance_id }));
+  });
+
   // ---------- conversas ----------
 
   // Lista de conversas, da mais recente para a mais antiga.
@@ -147,7 +177,8 @@ export async function whatsappRoutes(app: FastifyInstance) {
       }),
       req.query,
     );
-    let query = conversationsQuery(db);
+    // Conversa aberta pelo "Chamar" e ainda sem mensagens não entra na lista (só abre pelo lead).
+    let query = conversationsQuery(db).where('c.last_message_at', 'is not', null);
     if (q.tab === 'responderam') query = query.where('c.lead_replied', '=', true);
     if (q.instanceId) query = query.where('c.instance_id', '=', q.instanceId);
     if (q.q) {
@@ -156,6 +187,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
       query = query.where((eb) =>
         eb.or([
           eb('ct.name', 'ilike', text),
+          eb('l.company', 'ilike', text),
           ...(digits.length >= 3 ? [eb('ct.phone_jid', 'like', `%${digits}%`)] : []),
         ]),
       );

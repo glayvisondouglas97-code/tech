@@ -2,11 +2,12 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Kysely } from 'kysely';
 import type { Database } from '../../db/schema';
+import { markRepliedFromChat } from '../leads/service';
 import { scheduleHistoryImport } from './history';
 import { isMediaMessage, scheduleMediaDownload } from './media';
 import type { WaMessage as RawMessage } from './parse';
 import { enqueue } from './queue';
-import { publishQrCode } from './realtime';
+import { publishConversation, publishQrCode } from './realtime';
 import { saveMessage, updateMessageStatus, upsertInstance } from './store';
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
@@ -32,6 +33,17 @@ export async function handleEvolutionEvent(
         // Áudio/imagem/documento recebido (ou enviado pelo celular): já baixa o arquivo em segundo plano.
         if (saved && event === 'messages.upsert' && isMediaMessage(saved.message)) {
           scheduleMediaDownload(db, saved.message);
+        }
+        // O lead chamado pelo sistema respondeu: o resultado dele passa sozinho para "Respondeu".
+        if (saved && !saved.message.from_me && saved.conversation.lead_id) {
+          const leadId = saved.conversation.lead_id;
+          const text = saved.message.text ?? saved.conversation.last_message_preview;
+          const marked = await markRepliedFromChat(db, leadId, text).catch((error) => {
+            console.error(`[webhook] não foi possível marcar o lead ${leadId}:`, (error as Error).message);
+            return false;
+          });
+          // A tela do chat atualiza a faixa do lead com o resultado novo.
+          if (marked) await publishConversation(saved.conversation.id);
         }
       }
       return;

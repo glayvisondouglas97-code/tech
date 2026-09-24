@@ -6,9 +6,9 @@ import { fmtWhen } from '../lib/format';
 import { describeEvent, leadLabel, leadPartner, useLeadActions } from '../lib/leads';
 import { useSession } from '../lib/session';
 import { CallDialog } from './CallDialog';
+import { ChatButton } from './ChatButton';
 import { IconChat } from './Icons';
 import { Dialog, ResultPill } from './ui';
-import { WhatsAppLink } from './WhatsAppLink';
 
 /** Gaveta com os dados do lead e a linha do tempo completa (histórico de eventos). */
 export function LeadDrawer({ leadId, onClose }: { leadId: number | null; onClose: () => void }) {
@@ -79,10 +79,10 @@ export function LeadDrawer({ leadId, onClose }: { leadId: number | null; onClose
 
           {!lead.anonymized && lead.status !== 'bloqueado' && (
             <div className="row">
-              <WhatsAppLink lead={lead} templateId="none" className="btn btn-wa btn-sm">
+              <ChatButton lead={lead} className="btn btn-wa btn-sm">
                 <IconChat size={16} />
                 Abrir conversa
-              </WhatsAppLink>
+              </ChatButton>
               {(mine || manager) && lead.calledAt && (
                 <button type="button" className="btn btn-line btn-sm" onClick={() => setEditing(true)}>
                   Atualizar contato

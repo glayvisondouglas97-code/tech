@@ -1,210 +1,20 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
-import type {
-  AdminSettings,
-  BlockedPhone,
-  ListSummary,
-  MessageTemplate,
-  Page,
-  PrivacySearch,
-} from '../../shared/api';
-import { BASE_VARIABLES, fillTemplate } from '../../shared/template';
-import { IconPlus } from '../components/Icons';
+import { type FormEvent, useEffect, useState } from 'react';
+import type { AdminSettings, BlockedPhone, Page, PrivacySearch } from '../../shared/api';
 import { useToast } from '../components/Toasts';
 import { Confirm, Pager } from '../components/ui';
 import { api, apiDownload, errorMessage, qs } from '../lib/api';
 import { fmtN, fmtWhen, plural } from '../lib/format';
 import { useDebounced } from '../lib/hooks';
-import { useMe, useSession } from '../lib/session';
+import { useSession } from '../lib/session';
 
 const SECTIONS = [
-  ['mensagens', 'Mensagens prontas'],
   ['fila', 'Fila e regras'],
   ['empresa', 'Empresa'],
   ['bloqueados', 'Não contatar'],
   ['lgpd', 'Privacidade (LGPD)'],
 ] as const;
 type Section = (typeof SECTIONS)[number][0];
-
-function TemplatesSection() {
-  const me = useMe();
-  const qc = useQueryClient();
-  const toast = useToast();
-  const templates = useQuery({
-    queryKey: ['templates'],
-    queryFn: () => api<MessageTemplate[]>('/templates'),
-  });
-  const lists = useQuery({ queryKey: ['lists', false], queryFn: () => api<ListSummary[]>('/lists') });
-  const [currentId, setCurrentId] = useState<string | 'novo' | null>(null);
-  const [name, setName] = useState('');
-  const [body, setBody] = useState('');
-  const [deleting, setDeleting] = useState(false);
-  const ta = useRef<HTMLTextAreaElement>(null);
-  const list = templates.data ?? [];
-  const current = currentId === 'novo' ? null : (list.find((t) => t.id === currentId) ?? list[0] ?? null);
-
-  useEffect(() => {
-    if (currentId === 'novo') return;
-    setName(current?.name ?? '');
-    setBody(current?.body ?? '');
-  }, [current?.name, current?.body, currentId]);
-
-  const extraKeys = [...new Set((lists.data ?? []).flatMap((l) => l.extraColumns))].slice(0, 12);
-  const sample = { name: 'Mariana Souza', extra: Object.fromEntries(extraKeys.map((k) => [k, `(${k})`])) };
-  const dirty = currentId === 'novo' || name !== (current?.name ?? '') || body !== (current?.body ?? '');
-
-  function insert(v: string) {
-    const el = ta.current;
-    if (!el) return;
-    const s = el.selectionStart ?? body.length;
-    const e = el.selectionEnd ?? body.length;
-    const next = body.slice(0, s) + v + body.slice(e);
-    setBody(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(s + v.length, s + v.length);
-    });
-  }
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    try {
-      const r =
-        currentId === 'novo' || !current
-          ? await api<MessageTemplate[]>('/templates', { body: { name, body } })
-          : await api<MessageTemplate[]>(`/templates/${current.id}`, { method: 'PUT', body: { name, body } });
-      qc.setQueryData(['templates'], r);
-      qc.invalidateQueries({ queryKey: ['app-config'] });
-      if (currentId === 'novo') setCurrentId(r.find((t) => t.name === name)?.id ?? null);
-      toast('Mensagem salva. Já vale para toda a equipe.');
-    } catch (err) {
-      toast(errorMessage(err), { tone: 'bad' });
-    }
-  }
-
-  async function makeDefault() {
-    if (!current) return;
-    const r = await api<MessageTemplate[]>(`/templates/${current.id}/default`, { method: 'POST' });
-    qc.setQueryData(['templates'], r);
-    qc.invalidateQueries({ queryKey: ['app-config'] });
-    toast(`"${current.name}" agora é a mensagem padrão.`);
-  }
-
-  async function remove() {
-    if (!current) return;
-    const r = await api<MessageTemplate[]>(`/templates/${current.id}`, { method: 'DELETE' });
-    qc.setQueryData(['templates'], r);
-    qc.invalidateQueries({ queryKey: ['app-config'] });
-    setCurrentId(null);
-    setDeleting(false);
-  }
-
-  return (
-    <div className="cfg-grid">
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Mensagens</h2>
-            <p className="sub">O atendente escolhe qual usar. A padrão já vem marcada.</p>
-          </div>
-          <button
-            type="button"
-            className="btn btn-line btn-sm"
-            onClick={() => {
-              setCurrentId('novo');
-              setName('');
-              setBody('');
-            }}
-          >
-            <IconPlus /> Nova
-          </button>
-        </div>
-        <ul className="tpl-list">
-          {list.map((t) => (
-            <li key={t.id}>
-              <button
-                type="button"
-                aria-current={current?.id === t.id && currentId !== 'novo'}
-                onClick={() => setCurrentId(t.id)}
-              >
-                <span>{t.name}</span>
-                {t.isDefault && <span className="tag info">padrão</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="panel">
-        <form onSubmit={save} className="stack" style={{ gap: 12 }}>
-          <h2>{currentId === 'novo' ? 'Nova mensagem' : 'Editar mensagem'}</h2>
-          <label className="field">
-            Nome <small>só a equipe vê</small>
-            <input
-              className="input"
-              required
-              maxLength={60}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Primeiro contato"
-            />
-          </label>
-          <label className="field">
-            Texto
-            <textarea
-              ref={ta}
-              className="input"
-              rows={6}
-              maxLength={2000}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-            />
-          </label>
-          <div className="vars">
-            Inserir:
-            {[...BASE_VARIABLES, ...extraKeys.map((k) => `{${k}}`)].map((v) => (
-              <button key={v} type="button" onClick={() => insert(v)}>
-                {v}
-              </button>
-            ))}
-          </div>
-          <p className="sub small">
-            {'{nome}'} = primeiro nome com inicial maiúscula · {'{atendente}'} = nome de quem está chamando ·
-            colunas extras da planilha também funcionam.
-          </p>
-          <p className="eyebrow">Como o cliente vai receber</p>
-          <div className="bubble">
-            {fillTemplate(body, sample, me.name) || '(sem texto: o WhatsApp abre com a conversa em branco)'}
-          </div>
-          <div className="row">
-            <button type="submit" className="btn btn-primary" disabled={!dirty || !name.trim()}>
-              Salvar mensagem
-            </button>
-            {current && currentId !== 'novo' && !current.isDefault && (
-              <button type="button" className="btn btn-line" onClick={makeDefault}>
-                Usar como padrão
-              </button>
-            )}
-            {current && currentId !== 'novo' && list.length > 1 && (
-              <button type="button" className="btn btn-ghost" onClick={() => setDeleting(true)}>
-                Excluir
-              </button>
-            )}
-          </div>
-        </form>
-      </section>
-      <Confirm
-        open={deleting}
-        title="Excluir mensagem?"
-        confirmLabel="Excluir"
-        danger
-        onClose={() => setDeleting(false)}
-        onConfirm={remove}
-      >
-        <p>A mensagem "{current?.name}" deixa de aparecer para a equipe.</p>
-      </Confirm>
-    </div>
-  );
-}
 
 function RulesSection() {
   const qc = useQueryClient();
@@ -706,7 +516,7 @@ export function SettingsPage() {
   const { can } = useSession();
   const [section, setSection] = useState<Section>(() => {
     const h = window.location.hash.slice(1);
-    return (SECTIONS.find(([k]) => k === h)?.[0] ?? 'mensagens') as Section;
+    return (SECTIONS.find(([k]) => k === h)?.[0] ?? 'fila') as Section;
   });
   return (
     <div>
@@ -729,7 +539,6 @@ export function SettingsPage() {
           </button>
         ))}
       </nav>
-      {section === 'mensagens' && <TemplatesSection />}
       {section === 'fila' && <RulesSection />}
       {section === 'empresa' && <CompanySection />}
       {section === 'bloqueados' && <BlocklistSection />}

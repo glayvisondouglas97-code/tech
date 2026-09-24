@@ -15,11 +15,26 @@ export interface ConversationItem {
   id: number;
   unreadCount: number;
   leadReplied: boolean;
-  lastMessageAt: string;
+  /** null = conversa aberta pelo "Chamar" do lead e ainda sem mensagens (não aparece na lista). */
+  lastMessageAt: string | null;
   lastMessagePreview: string | null;
   lastMessageFromMe: boolean;
   contact: { id: number; name: string | null; phone: string | null };
   instance: { id: number; name: string; nickname: string | null; status: string };
+  /** Lead do Chamador ligado a esta conversa (chamado por ela). */
+  lead: { id: number; label: string } | null;
+}
+
+/** Resposta do "Chamar" de um lead: a conversa para abrir e, se for o caso, o aviso de ritmo. */
+export interface LeadChatResult {
+  conversationId: number;
+  warning: string | null;
+}
+
+/** Conversa já aberta com o lead por um dos números (para a janela de escolha do número). */
+export interface LeadConversationRef {
+  id: number;
+  instanceId: number;
 }
 
 export type ChatMessageType =

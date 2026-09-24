@@ -76,9 +76,9 @@ export function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): 
   return [...byId.values()].sort((a, b) => a.sentAt.localeCompare(b.sentAt) || a.id - b.id);
 }
 
-/** Mesma ordem da lista: mais recente primeiro; empate pelo maior id. */
+/** Mesma ordem da lista: mais recente primeiro; empate pelo maior id. Conversa ainda vazia fica no topo. */
 export function compareConversations(a: ConversationItem, b: ConversationItem): number {
-  return b.lastMessageAt.localeCompare(a.lastMessageAt) || b.id - a.id;
+  return (b.lastMessageAt ?? '~').localeCompare(a.lastMessageAt ?? '~') || b.id - a.id;
 }
 
 // ---------- exibição ----------
@@ -92,6 +92,11 @@ export function formatPhone(phone: string | null): string {
 
 export function contactName(contact: ConversationItem['contact']): string {
   return contact.name || formatPhone(contact.phone) || 'Contato sem número';
+}
+
+/** Nome da conversa: a empresa do lead chamado por ela; sem lead, o nome do contato no WhatsApp. */
+export function conversationTitle(c: Pick<ConversationItem, 'contact' | 'lead'>): string {
+  return c.lead?.label ?? contactName(c.contact);
 }
 
 export function instanceLabel(instance: { name: string; nickname: string | null }): string {
@@ -129,7 +134,8 @@ export function timeOf(iso: string): string {
 }
 
 /** Horário na lista de conversas: 14:32 / Ontem / seg. / 12/09/26 */
-export function listTime(iso: string): string {
+export function listTime(iso: string | null): string {
+  if (!iso) return '';
   const days = daysAgo(iso);
   if (days <= 0) return timeOf(iso);
   if (days === 1) return 'Ontem';

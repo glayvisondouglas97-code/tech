@@ -4,8 +4,9 @@ Um sistema só para a equipe que chama leads pelo WhatsApp:
 
 - o **gestor** importa as listas de leads (Excel ou CSV), cadastra a equipe e acompanha tudo pelo **Painel** e pela
   **Auditoria**;
-- cada **atendente** entra com o próprio login, pega leads da fila, chama e marca o resultado (mensagem enviada,
-  respondeu, sem WhatsApp…), com observações e retornos agendados;
+- cada **atendente** entra com o próprio login, pega leads da fila e clica em **Chamar no WhatsApp**: escolhe por
+  qual número falar e a conversa abre aqui dentro, pronta para gravar o áudio. O resultado (mensagem enviada,
+  respondeu) é marcado sozinho, e dá para anotar observações e agendar retornos;
 - as conversas de **todos os números de WhatsApp** conectados ficam num lugar só (**Conversas**), com texto, áudio
   gravado na hora, imagens e documentos. Os números são conectados pela
   [Evolution API](https://github.com/evolution-foundation/evolution-api) (versão fixa **v2.3.7**), na tela **Números**.
@@ -140,9 +141,8 @@ novo. O apelido se troca no lápis ao lado do nome.
   trocar cada uma), mostra o total de empresas e de telefones, quantos entram, quantos são repetidos e quantos são
   inválidos, e só grava quando você confirma. Depois dá para baixar as linhas recusadas com o motivo.
 - **A chamar:** escolha quantos leads pegar e de qual DDD › **Pegar leads** (cada atendente tem um limite por dia),
-  filtre a sua fila por DDD, **Chamar no WhatsApp**, "Marcar como chamado" ou "Sem WhatsApp". O **Modo foco** mostra
-  um lead por vez, com atalhos de teclado. Por enquanto o botão ainda abre o aplicativo do WhatsApp com a mensagem
-  pronta; na próxima fase ele passa a abrir a conversa aqui dentro, pelo número que você escolher.
+  filtre a sua fila por DDD e chame (veja **Chamar um lead** abaixo). "Marcar como chamado" e "Sem WhatsApp" continuam
+  para quem falou por outro meio. O **Modo foco** mostra um lead por vez, com atalhos de teclado (**W** chama).
 - **Conversas:** todas as conversas de todos os números, da mais recente para a mais antiga (detalhes abaixo).
 - **Já chamados:** empresa, sócio, quem chamou, quando e o resultado (mensagem enviada, respondeu, não respondeu, sem
   conta no banco, não é correntista…); dá para mudar o resultado, anotar, agendar retorno e reabrir.
@@ -151,13 +151,29 @@ novo. O apelido se troca no lápis ao lado do nome.
 - **Auditoria:** tudo o que cada pessoa fez, com filtro por pessoa e tipo: pedidos de leads, qual lead foi para quem,
   quantos cada um puxou e chamou por dia, números criados/renomeados/conectados e tentativas de acesso sem permissão.
   Baixa em planilha.
-- **Configurações:** mensagens prontas, regras da fila (quantos leads por clique, limite na fila, limite por dia, devolução automática
-  de leads parados), nome/logo da empresa, lista de "não contatar" e LGPD (só o dono).
+- **Configurações:** regras da fila (quantos leads por clique, limite na fila, limite por dia, devolução automática de
+  leads parados, aviso de conversas abertas por hora), nome/logo da empresa, lista de "não contatar" e LGPD (só o dono).
+
+### Chamar um lead
+
+1. Em **A chamar** (ou em **Já chamados**, ou na ficha do lead), clique em **Chamar no WhatsApp**.
+2. Escolha **por qual número** falar. O último número usado já vem marcado (é só apertar **Enter**) e as teclas **1** a
+   **9** escolhem pela posição. Números desconectados aparecem apagados; o selo **Já conversou** mostra por qual número
+   essa empresa já foi chamada.
+3. O sistema confere se o telefone do lead tem WhatsApp. Se não tiver, oferece **Marcar como Sem WhatsApp**.
+4. A conversa abre em **Conversas**, com a caixa de texto vazia: grave o áudio no **microfone** (ou escreva) e envie.
+5. Ao sair a primeira mensagem, o lead fica **Chamado · Mensagem enviada** e sai da sua fila. Quando ele responder, o
+   resultado muda sozinho para **Respondeu** (e a resposta fica no histórico do lead).
+6. No alto da conversa aparece a faixa do lead (situação, sócio e lista), com **Ver lead** (ficha e histórico, para
+   anotar e agendar retorno) e **Voltar para a fila**. No celular, a seta do alto volta para a fila.
+
+Uma conversa aberta pelo **Chamar** só aparece na lista de conversas depois da primeira mensagem.
 
 ### Conversas (WhatsApp)
 
-- **Lista:** a aba **Responderam** mostra só os leads que responderam; **Todas** mostra tudo. A busca procura pelo nome
-  ou por parte do telefone. Os botões com o nome de cada número mostram só as conversas daquele WhatsApp. Cada conversa
+- **Lista:** a aba **Responderam** mostra só os leads que responderam; **Todas** mostra tudo. A busca procura pelo nome,
+  pela empresa do lead ou por parte do telefone. A conversa de um lead chamado pelo sistema aparece com o nome da
+  empresa. Os botões com o nome de cada número mostram só as conversas daquele WhatsApp. Cada conversa
   tem a bolinha colorida do número e o contador de não lidas. O item **Conversas** do menu mostra o total de conversas
   não lidas, que também aparece no título da aba do navegador, por exemplo `(3) Chamador de Leads`.
 - **Chat:** **Enter** envia e **Shift + Enter** quebra a linha. No alto aparece por qual número a resposta sai (sempre o
@@ -241,6 +257,8 @@ equipe e relatórios estão em `src/server/routes`.
 
 | Rota | O que faz |
 |---|---|
+| `POST /api/leads/ID/conversation` | "Chamar": confere se o lead tem WhatsApp e abre a conversa pelo número escolhido (`{"instanceId": 1}`) |
+| `GET /api/leads/ID/conversations` | Conversas já abertas com o lead (por qual número) |
 | `GET /api/instances` | Lista os números e o status de cada um |
 | `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções (dono/administrador) |
 | `PATCH /api/instances/ID` | Troca o apelido de um número (dono/administrador) |

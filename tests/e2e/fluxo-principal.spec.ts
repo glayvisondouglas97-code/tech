@@ -1,17 +1,19 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { type Browser, type BrowserContext, expect, type Page, test } from '@playwright/test';
-import { DEFAULT_TEMPLATE, fillTemplate } from '../../src/shared/template';
 import { acceptanceRows, toXlsx } from '../fixtures';
 
 /**
  * Fluxo principal (critérios de aceite):
  * gestor entra, cadastra 2 atendentes, importa .xlsx de 1.000 linhas e vê o resumo certo;
- * atendentes pegam leads ao mesmo tempo sem repetir; atendente abre o WhatsApp com a mensagem
- * pronta e marca como chamado; o painel mostra quem chamou e quando; o atendente não acessa a gestão.
+ * atendentes pegam leads ao mesmo tempo sem repetir; atendente chama o lead pelo WhatsApp do sistema
+ * (escolhe o número, a conversa abre vazia, a primeira mensagem marca o lead como chamado sozinha);
+ * o painel mostra quem chamou e quando; o atendente não acessa a gestão.
  */
 
 const ADMIN = { email: 'gestora@e2e.teste', password: 'senha-e2e-123' };
+/** Mesmo valor em tests/e2e/server.ts. */
+const WEBHOOK_TOKEN = 'token-do-webhook-e2e';
 const SHOTS = resolve('test-results/telas');
 mkdirSync(SHOTS, { recursive: true });
 
@@ -34,16 +36,8 @@ async function login(page: Page, email: string, password: string) {
   await expect(page).toHaveURL(/\/chamar$/);
 }
 
-/** Bloqueia qualquer acesso real ao WhatsApp: a aba que abriria recebe uma página falsa. */
-async function fakeWhatsapp(context: BrowserContext) {
-  await context.route(/wa\.me|whatsapp\.com/, (route) =>
-    route.fulfill({ status: 200, contentType: 'text/html', body: '<p>WhatsApp (simulado)</p>' }),
-  );
-}
-
 async function newAttendantContext(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
-  await fakeWhatsapp(context);
   return { context, page: await context.newPage() };
 }
 
@@ -58,8 +52,13 @@ const attendants = [
 
 test.beforeAll(async ({ browser }) => {
   const context = await browser.newContext({ locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
-  await fakeWhatsapp(context);
   admin = await context.newPage();
+  // Um número de WhatsApp conectado (a Evolution de mentira avisa pelo webhook, como a de verdade).
+  const r = await admin.request.post('/webhook/evolution', {
+    headers: { 'x-webhook-token': WEBHOOK_TOKEN },
+    data: { event: 'connection.update', instance: 'whatsapp-01', data: { state: 'open' } },
+  });
+  expect(r.status()).toBe(200);
 });
 
 test('dono cadastra 2 atendentes: um com senha definida, outro por convite', async () => {
@@ -160,7 +159,7 @@ test('dois atendentes pegam leads ao mesmo tempo e nunca recebem o mesmo', async
   for (const s of sessions) await s.context.close();
 });
 
-test('atendente abre o WhatsApp com a mensagem pronta e marca como chamado', async ({ browser }) => {
+test('atendente chama pelo WhatsApp do sistema e o lead é marcado sozinho', async ({ browser }) => {
   const { context, page } = await newAttendantContext(browser);
   const ana = attendants[0] as (typeof attendants)[number];
   await login(page, ana.email, ana.password);
@@ -170,21 +169,32 @@ test('atendente abre o WhatsApp com a mensagem pronta e marca como chamado', asy
   const socio = ((await first.locator('.lead-socio').textContent()) ?? '').replace('Sócio:', '').trim();
   expect(name).toMatch(/ (Ltda|ME)$/);
   expect(socio).not.toBe('');
-  const wa = first.getByRole('link', { name: 'Chamar no WhatsApp' });
-  const href = (await wa.getAttribute('href')) as string;
-  const url = new URL(href);
-  expect(url.hostname).toBe('wa.me');
-  expect(url.pathname).toMatch(/^\/55419\d{8}$/);
-  expect(url.searchParams.get('text')).toBe(
-    fillTemplate(DEFAULT_TEMPLATE, { name: socio, company: name }, ana.name),
-  );
-  const popup = context.waitForEvent('page');
-  await wa.click();
-  await (await popup).close();
-  await expect(first.getByText(/WhatsApp aberto hoje/)).toBeVisible();
   await shot(page, '05-fila-atendente');
-  await first.getByRole('button', { name: 'Marcar como chamado' }).click();
-  await expect(page.getByText(`${name}: marcado como chamado.`)).toBeVisible();
+
+  // "Chamar" pergunta por qual número falar e abre a conversa dentro do sistema (sem wa.me).
+  await first.getByRole('button', { name: 'Chamar no WhatsApp' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Chamar pelo WhatsApp' });
+  await expect(dialog.getByText('Por qual número?')).toBeVisible();
+  await shot(page, '05b-escolher-numero');
+  await dialog.getByRole('button', { name: /whatsapp-01/ }).click();
+  await expect(page).toHaveURL(/\/conversas\/\d+$/);
+  const strip = page.locator('.wa-lead');
+  await expect(strip).toContainText(name);
+  await expect(strip).toContainText('Na sua fila');
+  await expect(page.getByText('Conversa nova')).toBeVisible();
+  await expect(page.getByPlaceholder('Digite uma mensagem')).toHaveValue('');
+  await shot(page, '05c-conversa-nova');
+
+  // A primeira mensagem enviada marca o lead como "Mensagem enviada".
+  await page.getByPlaceholder('Digite uma mensagem').fill('Olá! Tudo bem?');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.wa-bubble', { hasText: 'Olá! Tudo bem?' })).toBeVisible();
+  await expect(strip.getByText('Mensagem enviada')).toBeVisible();
+  await shot(page, '05d-mensagem-enviada');
+
+  // De volta à fila: o lead saiu e conta como chamado hoje.
+  await strip.getByRole('button', { name: 'Voltar para a fila' }).click();
+  await expect(page).toHaveURL(/\/chamar$/);
   await expect(page.locator('li.lead')).toHaveCount(9);
   await expect(page.locator('.kpi', { hasText: 'Você chamou hoje' }).locator('.kpi-v')).toHaveText('1');
 
@@ -217,8 +227,8 @@ test('atendente abre o WhatsApp com a mensagem pronta e marca como chamado', asy
 test('histórico do lead mostra quem fez cada ação', async () => {
   await admin.locator('li.crow .lead-name button').first().click();
   const drawer = admin.getByRole('dialog', { name: 'Lead' });
-  await expect(drawer.getByText('Marcou como chamado')).toBeVisible();
-  await expect(drawer.getByText('Abriu o WhatsApp')).toBeVisible();
+  await expect(drawer.getByText('Chamou pelo WhatsApp do sistema')).toBeVisible();
+  await expect(drawer.getByText('Abriu a conversa no WhatsApp')).toBeVisible();
   await expect(drawer.getByText('Pegou da fila livre')).toBeVisible();
   await expect(drawer.getByText(/Importado na lista "Campanha E2E"/)).toBeVisible();
   await shot(admin, '08-historico');

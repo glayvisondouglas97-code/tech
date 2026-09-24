@@ -26,8 +26,8 @@
 - `leads`: nome, telefone E.164, outros telefones, colunas extras (`jsonb`), **estado atual** (`status` pendente/chamado/bloqueado, `assigned_to`, `called_by`, `called_at`, `result`, `note`, `callback_at`, `version`).
 - `lead_events`: **histórico só de acréscimo** (importado, pegou, abriu WhatsApp, chamado, resultado, observação, desfeito, devolvido, atribuído, expirado, retorno, bloqueado…), com quem fez e quando. Desfazer ou chamar de novo gera evento novo; nada é apagado.
 - `imports` + `import_rejections`: rascunho da importação e linhas recusadas com motivo.
-- `blocked_phones` (não contatar), `message_templates`, `settings`, `audit_log` (acessos e ações sensíveis).
-- WhatsApp (migração `0003`): `wa_instances` (números), `wa_contacts` (telefone e @lid da mesma pessoa), `wa_conversations` (uma por número + contato, com não lidas e "respondeu") e `wa_messages` (únicas por número + ID do WhatsApp; `sent_by` guarda quem da equipe enviou). Os arquivos de mídia ficam no disco (volume `midias`), o banco guarda só o caminho.
+- `blocked_phones` (não contatar), `settings`, `audit_log` (acessos e ações sensíveis). As mensagens prontas (`message_templates`) saíram na migração `0004`: o primeiro contato agora é feito pelo chat do sistema.
+- WhatsApp (migrações `0003` e `0004`): `wa_instances` (números), `wa_contacts` (telefone e @lid da mesma pessoa), `wa_conversations` (uma por número + contato, com não lidas, "respondeu" e o `lead_id` do lead chamado por ela; `last_message_at` vazio enquanto não há mensagens) e `wa_messages` (únicas por número + ID do WhatsApp; `sent_by` guarda quem da equipe enviou). Os arquivos de mídia ficam no disco (volume `midias`), o banco guarda só o caminho.
 
 Índices parciais para cada tela: fila livre (`status = 'pendente' AND assigned_to IS NULL`), fila do atendente, já chamados por data e por atendente, retornos, telefone e busca por nome (trigram). Teste com 100 mil leads em `tests/integration/scale.test.ts`.
 
@@ -83,7 +83,9 @@ O código fica em `src/server/modules/whatsapp` e `src/server/routes/whatsapp.ts
 - **Expiração:** leads que o atendente **pegou** e nem abriu no WhatsApp voltam para a fila livre depois de X horas (padrão 48, configurável, 0 desliga). Leads divididos na importação ou passados pelo gestor não expiram sozinhos. Tarefas periódicas usam lock do Postgres para rodar em um servidor só.
 - **"Sem WhatsApp"** não conta como chamado nas métricas; conversão = fechados ÷ chamados.
 - **Atendente não vê chamados dos colegas** (privacidade/LGPD); supervisor e gestor veem tudo.
-- **WhatsApp (até a Fase 8):** o botão do lead ainda usa o link oficial `wa.me/<número>?text=...`. Na Fase 9 ele passa a abrir a conversa dentro do sistema, pelo número escolhido.
+- **Chamar pelo sistema (sem `wa.me`):** o botão do lead pergunta o número, confere na Evolution se o telefone tem WhatsApp (`POST /chat/whatsappNumbers/{instância}`, que já acerta o 9º dígito dos celulares brasileiros e devolve o jid certo) e abre a conversa ligada ao lead (`wa_conversations.lead_id`). A conversa pode existir sem mensagens; ela só entra na lista depois da primeira.
+- **Resultado automático:** a primeira mensagem enviada pelo sistema marca o lead como chamado ("Mensagem enviada") só se ele está na fila de quem enviou, com o evento `chamado` (`automatico: true` e o número usado). Quando o lead responde (mensagem ao vivo, não histórico), "Mensagem enviada" ou "Cliente não respondeu" viram "Respondeu", com os eventos `whatsapp_resposta` e `resultado` (`automatico: true`). Outros resultados (interessado, fechou…) não são mexidos.
+- **Abrir a conversa conta como "abriu o WhatsApp"** (`whatsapp_opened_at` e evento `abriu_whatsapp`): continua valendo o aviso de muitas conversas por hora e a regra de devolução de leads parados.
 - **Convite por link** (sem e-mail): o gestor manda pelo WhatsApp; o token fica depois do `#` e não aparece em logs. Trocar para e-mail exige só um provedor SMTP (ponto de extensão em `createPasswordLink`).
 - **Primeiro administrador:** tela de primeiro acesso protegida por `SETUP_TOKEN` (para hospedagens sem terminal) ou comando `criar-admin`.
 - **Limites de taxa em memória** (login por IP e por e-mail, requisições por usuário): suficiente para um servidor. Com vários servidores, trocar por Redis.

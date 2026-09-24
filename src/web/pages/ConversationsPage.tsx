@@ -18,7 +18,9 @@ export function ConversationsPage() {
   const selectedId = Number(params.id) || null;
   const navigate = useNavigate();
   const location = useLocation();
-  const [tab, setTab] = useState<ConversationTab>('responderam');
+  const navState = location.state as { fromList?: boolean; fromLead?: boolean } | null;
+  // Vindo do "Chamar" de um lead, a conversa nova (sem resposta ainda) aparece na aba Todas.
+  const [tab, setTab] = useState<ConversationTab>(() => (navState?.fromLead ? 'todas' : 'responderam'));
   const [instanceId, setInstanceId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const debounced = useDebounced(search.trim(), 300);
@@ -32,10 +34,11 @@ export function ConversationsPage() {
     (id: number) => navigate(`/conversas/${id}`, { replace: !!selectedId, state: { fromList: true } }),
     [navigate, selectedId],
   );
+  // Fechar volta para onde a pessoa estava: a lista de conversas ou, vindo do "Chamar", a fila de leads.
   const closeConversation = useCallback(() => {
-    if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1);
+    if (navState?.fromList || navState?.fromLead) navigate(-1);
     else navigate('/conversas', { replace: true });
-  }, [navigate, location.state]);
+  }, [navigate, navState]);
 
   // Se a conversa aberta foi juntada a outra (mesmo lead por telefone e @lid), abre a que ficou.
   useSocketEvent<ConversationRemovedEvent>('conversation:removed', ({ id, mergedInto }) => {
@@ -129,6 +132,7 @@ function useConversations(tab: ConversationTab, instanceId: number | null, q: st
   useSocketEvent('conversations:reload', () => void reload().catch(() => {}));
 
   useSocketEvent<ConversationItem>('conversation:updated', (updated) => {
+    if (!updated.lastMessageAt) return; // aberta pelo "Chamar" e ainda sem mensagens: fica fora da lista
     const matchesFilter =
       (tab === 'todas' || updated.leadReplied) && (instanceId === null || updated.instance.id === instanceId);
     setItems((prev) => {

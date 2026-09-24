@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import {
   type CSSProperties,
   useCallback,
@@ -16,7 +17,7 @@ import type {
 import { errorMessage } from '../../lib/api';
 import { useRealtimeOnline, useReconnect, useSocketEvent } from '../../lib/socket';
 import {
-  contactName,
+  conversationTitle,
   dayLabel,
   formatPhone,
   instanceColor,
@@ -25,10 +26,20 @@ import {
   PAGE_SIZE,
   wa,
 } from '../../lib/whatsapp';
-import { IconAlert, IconArrowDown, IconBack, IconChat, IconWarning, IconWifiOff, IconX } from '../Icons';
+import {
+  IconAlert,
+  IconArrowDown,
+  IconBack,
+  IconChat,
+  IconMic,
+  IconWarning,
+  IconWifiOff,
+  IconX,
+} from '../Icons';
 import { Empty } from '../ui';
 import { Composer } from './Composer';
 import { ContactAvatar } from './ContactAvatar';
+import { LeadStrip } from './LeadStrip';
 import { MessageBubble } from './MessageBubble';
 
 type Props = {
@@ -85,6 +96,15 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
   const firstLoad = useRef(true);
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
+  const qc = useQueryClient();
+
+  // O resultado do lead muda sozinho quando a primeira mensagem sai e quando ele responde:
+  // atualiza a faixa do lead e as telas do Chamador.
+  const refreshLead = useCallback(() => {
+    if (!conversationRef.current?.lead) return;
+    for (const key of ['lead', 'queue', 'queue-stats', 'leads', 'dashboard'])
+      qc.invalidateQueries({ queryKey: [key] });
+  }, [qc]);
 
   // Zera as não lidas (só no sistema) enquanto a conversa está aberta e a aba do navegador visível.
   const markReadIfNeeded = useCallback((c: ConversationItem | null) => {
@@ -126,6 +146,7 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
     if (updated.id !== conversationId) return;
     setConversation(updated);
     markReadIfNeeded(updated);
+    if (updated.lead) void qc.invalidateQueries({ queryKey: ['lead', updated.lead.id] });
   });
 
   const scrollToBottom = useCallback((smooth = false) => {
@@ -191,17 +212,21 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
   };
 
   // Texto, arquivo ou áudio: a mensagem enviada entra no chat; se falhar, mostra o aviso.
-  const send = useCallback(async (request: () => Promise<ChatMessage>) => {
-    setError(null);
-    try {
-      const sent = await request();
-      stickToBottom.current = true;
-      setMessages((prev) => mergeMessages(prev, [sent]));
-    } catch (e) {
-      setError(errorMessage(e));
-      throw e;
-    }
-  }, []);
+  const send = useCallback(
+    async (request: () => Promise<ChatMessage>) => {
+      setError(null);
+      try {
+        const sent = await request();
+        stickToBottom.current = true;
+        setMessages((prev) => mergeMessages(prev, [sent]));
+        refreshLead();
+      } catch (e) {
+        setError(errorMessage(e));
+        throw e;
+      }
+    },
+    [refreshLead],
+  );
 
   const groups = useMemo(() => groupByDay(messages), [messages]);
 
@@ -227,7 +252,7 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
   // Apelido e status do número vêm da lista de números, que é atualizada em tempo real.
   const instance = instances.find((i) => i.id === conversation.instance.id) ?? conversation.instance;
   const label = instanceLabel(instance);
-  const name = contactName(conversation.contact);
+  const name = conversationTitle(conversation);
 
   return (
     <section className="wa-chat" aria-label={`Conversa com ${name}`}>
@@ -235,10 +260,10 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
         <button type="button" className="icon-btn wa-back" onClick={onBack} aria-label="Voltar para a lista">
           <IconBack />
         </button>
-        <ContactAvatar name={conversation.contact.name} />
+        <ContactAvatar name={conversation.lead?.label ?? conversation.contact.name} />
         <div className="wa-chat-title">
           <b>{name}</b>
-          {conversation.contact.name && conversation.contact.phone && (
+          {(conversation.contact.name || conversation.lead) && conversation.contact.phone && (
             <span>{formatPhone(conversation.contact.phone)}</span>
           )}
         </div>
@@ -251,6 +276,8 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
           <span>via {label}</span>
         </span>
       </header>
+
+      {conversation.lead && <LeadStrip leadId={conversation.lead.id} label={conversation.lead.label} />}
 
       {!online && (
         <div className="wa-banner wa-offline-chat" role="status">
@@ -280,11 +307,20 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
                 <span className="spinner" />
               </div>
             )}
-            {loaded && messages.length === 0 && (
-              <Empty title="Nenhuma mensagem por aqui" icon={<IconChat />}>
-                <p>As mensagens desta conversa aparecem aqui assim que chegarem.</p>
-              </Empty>
-            )}
+            {loaded &&
+              messages.length === 0 &&
+              (conversation.lead ? (
+                <Empty title="Conversa nova" icon={<IconMic />}>
+                  <p>
+                    Grave um áudio no microfone ou escreva a primeira mensagem. Ela sai pelo número{' '}
+                    <b>{label}</b>.
+                  </p>
+                </Empty>
+              ) : (
+                <Empty title="Nenhuma mensagem por aqui" icon={<IconChat />}>
+                  <p>As mensagens desta conversa aparecem aqui assim que chegarem.</p>
+                </Empty>
+              ))}
             {groups.map((group) => (
               <section key={group.day} className="wa-day">
                 <div className="wa-day-label">{group.day}</div>

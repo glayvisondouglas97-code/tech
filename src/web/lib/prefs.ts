@@ -2,14 +2,13 @@ import { useCallback, useState } from 'react';
 
 /** Preferências deste aparelho (não vão para o servidor). Tudo protegido: o navegador pode bloquear o armazenamento. */
 export interface Prefs {
-  templateId: string | 'none' | null;
   theme: 'auto' | 'light' | 'dark';
 }
 
 const KEY = 'cl_prefs';
 
 function defaults(): Prefs {
-  return { templateId: null, theme: 'auto' };
+  return { theme: 'auto' };
 }
 
 export function readPrefs(): Prefs {

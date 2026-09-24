@@ -26,7 +26,7 @@ import {
   exportSubjectData,
   searchByPhone,
 } from '../modules/privacy/service';
-import { getAppConfig, getSettings, listTemplates, toAdminSettings } from '../modules/settings/service';
+import { getAppConfig, getSettings, toAdminSettings } from '../modules/settings/service';
 import {
   createUser,
   listTeam,
@@ -252,121 +252,6 @@ export async function adminRoutes(app: FastifyInstance) {
       .execute();
     await audit(db, { userId: admin.id, action: 'removeu_logo', ip: req.ip });
     return { ok: true };
-  });
-
-  // ---------- mensagens prontas ----------
-  const templateSchema = z.object({
-    name: z.string().trim().min(1).max(60),
-    body: z.string().trim().max(2000),
-  });
-
-  app.get('/templates', async (req) => {
-    requireUser(req);
-    return listTemplates(db);
-  });
-
-  app.post('/templates', async (req) => {
-    const admin = requirePermission(req, 'manageSettings');
-    const body = parse(templateSchema, req.body);
-    const count = await db
-      .selectFrom('message_templates')
-      .select(sql<number>`count(*)`.as('n'))
-      .executeTakeFirstOrThrow();
-    if (count.n >= 20) throw badRequest('Limite de 20 mensagens prontas.');
-    const t = await db
-      .insertInto('message_templates')
-      .values({ name: body.name, body: body.body, is_default: count.n === 0, sort: count.n })
-      .returning('id')
-      .executeTakeFirstOrThrow();
-    await audit(db, {
-      userId: admin.id,
-      action: 'criou_mensagem',
-      entity: 'mensagem',
-      entityId: t.id,
-      ip: req.ip,
-    });
-    return listTemplates(db);
-  });
-
-  app.put('/templates/:id', async (req) => {
-    const admin = requirePermission(req, 'manageSettings');
-    const id = idOf(req);
-    const body = parse(templateSchema, req.body);
-    const r = await db
-      .updateTable('message_templates')
-      .set({ name: body.name, body: body.body, updated_at: sql`now()` })
-      .where('id', '=', id)
-      .executeTakeFirst();
-    if (!Number(r.numUpdatedRows)) throw notFound('Mensagem não encontrada.');
-    await audit(db, {
-      userId: admin.id,
-      action: 'alterou_mensagem',
-      entity: 'mensagem',
-      entityId: id,
-      ip: req.ip,
-    });
-    return listTemplates(db);
-  });
-
-  app.post('/templates/:id/default', async (req) => {
-    const admin = requirePermission(req, 'manageSettings');
-    const id = idOf(req);
-    await db.transaction().execute(async (trx) => {
-      await trx
-        .updateTable('message_templates')
-        .set({ is_default: false })
-        .where('is_default', '=', true)
-        .execute();
-      const r = await trx
-        .updateTable('message_templates')
-        .set({ is_default: true })
-        .where('id', '=', id)
-        .executeTakeFirst();
-      if (!Number(r.numUpdatedRows)) throw notFound('Mensagem não encontrada.');
-    });
-    await audit(db, {
-      userId: admin.id,
-      action: 'mensagem_padrao',
-      entity: 'mensagem',
-      entityId: id,
-      ip: req.ip,
-    });
-    return listTemplates(db);
-  });
-
-  app.delete('/templates/:id', async (req) => {
-    const admin = requirePermission(req, 'manageSettings');
-    const id = idOf(req);
-    await db.transaction().execute(async (trx) => {
-      const t = await trx
-        .selectFrom('message_templates')
-        .select('is_default')
-        .where('id', '=', id)
-        .executeTakeFirst();
-      if (!t) throw notFound('Mensagem não encontrada.');
-      await trx.deleteFrom('message_templates').where('id', '=', id).execute();
-      if (t.is_default) {
-        const next = await trx
-          .selectFrom('message_templates')
-          .select('id')
-          .orderBy('sort')
-          .executeTakeFirst();
-        if (next)
-          await trx
-            .updateTable('message_templates')
-            .set({ is_default: true })
-            .where('id', '=', next.id)
-            .execute();
-      }
-    });
-    await audit(db, {
-      userId: admin.id,
-      action: 'excluiu_mensagem',
-      entity: 'mensagem',
-      entityId: id,
-      ip: req.ip,
-    });
-    return listTemplates(db);
   });
 
   // ---------- não contatar ----------

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { LeadItem, ListSummary, Page, TeamMember } from '../../shared/api';
 import { RESULTS } from '../../shared/results';
 import { CallDialog } from '../components/CallDialog';
+import { ChatButton } from '../components/ChatButton';
 import {
   IconChat,
   IconClock,
@@ -14,7 +15,6 @@ import {
 } from '../components/Icons';
 import { LeadDrawer } from '../components/LeadDrawer';
 import { Avatar, Empty, Pager, ResultPill, ResultSelect, Skeleton } from '../components/ui';
-import { WhatsAppLink } from '../components/WhatsAppLink';
 import { api, qs } from '../lib/api';
 import { fmtN, fmtWhen } from '../lib/format';
 import { useDebounced } from '../lib/hooks';
@@ -145,14 +145,9 @@ function CalledRow({
       </div>
       <div className="crow-act">
         {!lead.anonymized && !blocked && (
-          <WhatsAppLink
-            lead={lead}
-            templateId="none"
-            className="icon-btn wa"
-            title="Abrir conversa no WhatsApp"
-          >
+          <ChatButton lead={lead} className="icon-btn wa" title="Abrir a conversa no WhatsApp do sistema">
             <IconChat />
-          </WhatsAppLink>
+          </ChatButton>
         )}
         {editable && (
           <button

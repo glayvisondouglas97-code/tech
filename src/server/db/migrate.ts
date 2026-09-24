@@ -3,12 +3,14 @@ import type { Db } from './index';
 import * as m0001 from './migrations/0001_inicial';
 import * as m0002 from './migrations/0002_empresas_dono_limites';
 import * as m0003 from './migrations/0003_whatsapp';
+import * as m0004 from './migrations/0004_chamar_pelo_sistema';
 
 /** Lista fixa de migrações: funciona igual no código TypeScript e no build empacotado. */
 const migrations: Record<string, Migration> = {
   '0001_inicial': m0001,
   '0002_empresas_dono_limites': m0002,
   '0003_whatsapp': m0003,
+  '0004_chamar_pelo_sistema': m0004,
 };
 
 class StaticProvider implements MigrationProvider {

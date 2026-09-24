@@ -1,13 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
-import type { LeadEvent, LeadItem, QueueResponse, WhatsappOpenResult } from '../../shared/api';
+import type { LeadEvent, LeadItem, QueueResponse } from '../../shared/api';
 import { type ResultId, resultLabel } from '../../shared/results';
-import { fillTemplate } from '../../shared/template';
-import { whatsappLink } from '../../shared/whatsapp';
 import { useToast } from '../components/Toasts';
 import { ApiError, api, errorMessage } from './api';
 import { fmtWhen } from './format';
-import { useSession } from './session';
 
 /** Nome principal do lead: a empresa (PJ); sem empresa, o nome do sócio. */
 export function leadLabel(l: { name: string; company?: string }): string {
@@ -30,40 +27,6 @@ export function companyInitials(label: string): string {
   const first = words[0]?.[0] ?? label[0] ?? '?';
   const last = words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '';
   return (first + last).toUpperCase();
-}
-
-/** Texto da mensagem pronta escolhida para este lead (ou null sem mensagem). */
-export function useMessageText() {
-  const { me, config } = useSession();
-  return useCallback(
-    (lead: LeadItem, templateId: string | 'none' | null): string | null => {
-      const templates = config?.templates ?? [];
-      const tpl =
-        templateId === 'none'
-          ? null
-          : (templates.find((t) => t.id === templateId) ??
-            templates.find((t) => t.isDefault) ??
-            templates[0]);
-      if (!tpl) return null;
-      return (
-        fillTemplate(
-          tpl.body,
-          { name: lead.name, company: lead.company, extra: lead.extra },
-          me?.name ?? '',
-        ) || null
-      );
-    },
-    [config, me],
-  );
-}
-
-/** Link do WhatsApp (wa.me) com a mensagem pronta escolhida (ou sem mensagem). */
-export function useWhatsappLink() {
-  const text = useMessageText();
-  return useCallback(
-    (lead: LeadItem, templateId: string | 'none' | null) => whatsappLink(lead.phone, text(lead, templateId)),
-    [text],
-  );
 }
 
 /** Ações sobre um lead, com aviso de "Desfazer" e atualização das telas. */
@@ -193,27 +156,9 @@ export function useLeadActions() {
     [dropFromQueue, toast, fail, refresh],
   );
 
-  /** Registra que abriu o WhatsApp (sem travar a abertura do link). */
-  const whatsappOpened = useCallback(
-    (lead: LeadItem) => {
-      const now = new Date().toISOString();
-      qc.setQueriesData<QueueResponse>({ queryKey: ['queue'] }, (old) =>
-        old
-          ? { ...old, items: old.items.map((i) => (i.id === lead.id ? { ...i, whatsappOpenedAt: now } : i)) }
-          : old,
-      );
-      api<WhatsappOpenResult>(`/leads/${lead.id}/whatsapp`, { method: 'POST', keepalive: true })
-        .then((r) => {
-          if (r.warning) toast(r.warning, { tone: 'warn', ms: 9000 });
-        })
-        .catch(() => {});
-    },
-    [qc, toast],
-  );
-
   return useMemo(
-    () => ({ markCalled, undo, update, requeue, optOut, whatsappOpened, refresh }),
-    [markCalled, undo, update, requeue, optOut, whatsappOpened, refresh],
+    () => ({ markCalled, undo, update, requeue, optOut, refresh }),
+    [markCalled, undo, update, requeue, optOut, refresh],
   );
 }
 
@@ -236,12 +181,17 @@ export function describeEvent(e: LeadEvent): { title: string; detail?: string } 
     case 'pegou':
       return { title: 'Pegou da fila livre', detail: d.ddd ? `Pedido só do DDD ${d.ddd}` : undefined };
     case 'abriu_whatsapp':
-      return { title: 'Abriu o WhatsApp' };
+      return { title: 'Abriu a conversa no WhatsApp' };
     case 'chamado':
-      return { title: 'Marcou como chamado', detail: resultLabel(String(d.resultado ?? 'enviado')) };
+      return d.automatico
+        ? {
+            title: 'Chamou pelo WhatsApp do sistema',
+            detail: `${resultLabel(String(d.resultado ?? 'enviado'))}${d.numero ? ` · pelo número ${d.numero}` : ''}`,
+          }
+        : { title: 'Marcou como chamado', detail: resultLabel(String(d.resultado ?? 'enviado')) };
     case 'resultado':
       return {
-        title: d.automatico ? 'Resultado mudou sozinho (resposta pelo WhatsApp)' : 'Mudou o resultado',
+        title: d.automatico ? 'Resultado mudou sozinho (o lead respondeu)' : 'Mudou o resultado',
         detail: `${d.de ? resultLabel(String(d.de)) : '—'} → ${resultLabel(String(d.para))}`,
       };
     case 'observacao':

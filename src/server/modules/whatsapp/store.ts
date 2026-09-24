@@ -156,7 +156,7 @@ export async function saveMessage(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    const isLatest = sentAt >= conversation.last_message_at;
+    const isLatest = !conversation.last_message_at || sentAt >= conversation.last_message_at;
     const updated = await tx
       .updateTable('wa_conversations')
       .set((eb) => ({
@@ -197,6 +197,46 @@ async function publishSaveResult(
   } catch (error) {
     console.error('[tempo real] falha ao avisar os navegadores:', error);
   }
+}
+
+/**
+ * Conversa de um número com um lead, aberta pelo botão "Chamar" (pode ainda não ter mensagens).
+ * Usa o contato que já existir (pelo telefone ou @lid) e liga a conversa ao lead.
+ */
+export async function openLeadConversation(
+  db: Kysely<Database>,
+  instanceId: number,
+  jids: { phoneJid: string | null; lidJid: string | null },
+  leadId: number,
+): Promise<WaConversation> {
+  const changes: MergeChanges = { removed: [], touched: new Set() };
+  const conversation = await db.transaction().execute(async (tx) => {
+    const contact = await resolveContact(tx, jids.phoneJid, jids.lidJid, null, changes);
+    const existing = await tx
+      .selectFrom('wa_conversations')
+      .selectAll()
+      .where('instance_id', '=', instanceId)
+      .where('contact_id', '=', contact.id)
+      .executeTakeFirst();
+    if (existing) {
+      return existing.lead_id === leadId
+        ? existing
+        : tx
+            .updateTable('wa_conversations')
+            .set({ lead_id: leadId })
+            .where('id', '=', existing.id)
+            .returningAll()
+            .executeTakeFirstOrThrow();
+    }
+    return tx
+      .insertInto('wa_conversations')
+      .values({ instance_id: instanceId, contact_id: contact.id, lead_id: leadId })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  });
+  changes.touched.add(conversation.id);
+  await publishSaveResult(changes, null, null);
+  return conversation;
 }
 
 /**
@@ -283,12 +323,15 @@ async function mergeContact(tx: Tx, keep: WaContact, other: WaContact, changes: 
       .set({ conversation_id: target.id })
       .where('conversation_id', '=', conversation.id)
       .execute();
-    const otherIsLatest = conversation.last_message_at > target.last_message_at;
+    const otherIsLatest =
+      !!conversation.last_message_at &&
+      (!target.last_message_at || conversation.last_message_at > target.last_message_at);
     await tx
       .updateTable('wa_conversations')
       .set({
         unread_count: target.unread_count + conversation.unread_count,
         lead_replied: target.lead_replied || conversation.lead_replied,
+        lead_id: target.lead_id ?? conversation.lead_id,
         ...(otherIsLatest && {
           last_message_at: conversation.last_message_at,
           last_message_preview: conversation.last_message_preview,
