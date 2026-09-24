@@ -93,8 +93,8 @@ docker compose exec app node src/cli.ts criar-admin "Seu Nome" voce@email.com
 ```
 
 Entre no site com o e-mail e a senha provisória mostrada. Depois:
-1. troque a senha em **Minha senha**;
-2. cadastre a equipe em **Usuários**.
+1. troque a senha em **Minha senha** (clique no círculo com as suas iniciais, no canto de baixo à esquerda);
+2. cadastre a equipe em **Usuários** → **Adicionar pessoa**.
 
 ## 8. Conectar os números (e desligar o sistema do seu computador)
 
@@ -102,9 +102,13 @@ Entre no site com o e-mail e a senha provisória mostrada. Depois:
    pasta do projeto, rode `docker compose down`.
 2. Em cada celular: WhatsApp → **Dispositivos conectados** → toque no aparelho **Central WhatsApp** antigo →
    **Desconectar**.
-3. No site do VPS: **Números** → **+ Adicionar número** → escaneie o QR Code com cada celular.
+3. No site do VPS: **Números** → **Adicionar número** → digite o apelido → **Criar e conectar** → escaneie o QR Code
+   com cada celular.
 
 O histórico dos últimos 14 dias de cada número é importado sozinho ao conectar.
+
+Para a equipe usar no celular, basta abrir o endereço `https://` no navegador do celular e adicionar à tela inicial
+(passo a passo no [README](../README.md#no-celular)).
 
 ## 9. Backups
 

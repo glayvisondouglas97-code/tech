@@ -109,6 +109,17 @@ apiRouter.get('/conversations', async (req, res) => {
   const where: Prisma.ConversationWhereInput = {};
   if (req.query.tab === 'responderam') where.leadReplied = true;
   if (req.query.instanceId) where.instanceId = parseId(req.query.instanceId);
+  // Busca por nome do lead ou por parte do telefone.
+  const search = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
+  if (search) {
+    const digits = search.replace(/\D/g, '');
+    where.contact = {
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        ...(digits.length >= 3 ? [{ phoneJid: { contains: digits } }] : []),
+      ],
+    };
+  }
   const limit = parseLimit(req.query.limit, 50, 200);
   const cursor = req.query.cursor ? parseId(req.query.cursor) : undefined;
 
@@ -120,6 +131,15 @@ apiRouter.get('/conversations', async (req, res) => {
     include: { contact: true, instance: true },
   });
   res.json(conversations.map(conversationDto));
+});
+
+// Números para os selos da navegação: conversas com mensagens não lidas e números desconectados.
+apiRouter.get('/stats', async (_req, res) => {
+  const [unreadConversations, disconnectedInstances] = await Promise.all([
+    prisma.conversation.count({ where: { unreadCount: { gt: 0 } } }),
+    prisma.instance.count({ where: { status: { not: 'open' } } }),
+  ]);
+  res.json({ unreadConversations, disconnectedInstances });
 });
 
 apiRouter.get('/conversations/:id', async (req, res) => {

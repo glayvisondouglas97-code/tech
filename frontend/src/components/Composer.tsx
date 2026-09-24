@@ -1,5 +1,8 @@
+import { FileText, Mic, Paperclip, SendHorizontal, Trash, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MAX_UPLOAD_BYTES } from '../api.ts';
+import { formatDuration, formatSize } from '../format.ts';
+import { isTouchDevice, Spinner } from './ui.tsx';
 
 type Props = {
   onSendText: (text: string) => Promise<void>;
@@ -8,10 +11,8 @@ type Props = {
   onError: (message: string) => void;
 };
 
-const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-const formatSize = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
-
-// Caixa do chat: texto (Enter envia, Shift+Enter quebra linha), anexo (📎) e áudio gravado (🎤).
+// Caixa do chat: texto, anexo (imagem ou documento) e áudio gravado no navegador.
+// No computador, Enter envia e Shift+Enter quebra a linha. No celular, Enter quebra a linha e o botão envia.
 export function Composer({ onSendText, onSendFile, onSendAudio, onError }: Props) {
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -19,6 +20,7 @@ export function Composer({ onSendText, onSendFile, onSendAudio, onError }: Props
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recorder = useAudioRecorder(onError);
+  const thumbnail = useObjectUrl(file?.type.startsWith('image/') ? file : null);
 
   // A caixa cresce com o texto, até um limite.
   useLayoutEffect(() => {
@@ -27,6 +29,10 @@ export function Composer({ onSendText, onSendFile, onSendAudio, onError }: Props
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [text]);
+
+  const focusInput = () => {
+    if (!isTouchDevice) inputRef.current?.focus(); // no celular, não abre o teclado sozinho
+  };
 
   const run = async (task: () => Promise<void>, onSuccess: () => void) => {
     setSending(true);
@@ -37,19 +43,25 @@ export function Composer({ onSendText, onSendFile, onSendAudio, onError }: Props
       // o aviso de erro é mostrado pelo chat; o conteúdo fica para tentar de novo
     } finally {
       setSending(false);
-      inputRef.current?.focus();
+      focusInput();
     }
   };
 
   const submit = () => {
     if (sending) return;
     if (file) {
-      void run(() => onSendFile(file, text.trim()), () => {
-        setFile(null);
-        setText('');
-      });
+      void run(
+        () => onSendFile(file, text.trim()),
+        () => {
+          setFile(null);
+          setText('');
+        },
+      );
     } else if (text.trim()) {
-      void run(() => onSendText(text.trim()), () => setText(''));
+      void run(
+        () => onSendText(text.trim()),
+        () => setText(''),
+      );
     }
   };
 
@@ -60,7 +72,7 @@ export function Composer({ onSendText, onSendFile, onSendAudio, onError }: Props
       return;
     }
     setFile(picked);
-    inputRef.current?.focus();
+    focusInput();
   };
 
   const sendRecording = async () => {
@@ -70,16 +82,29 @@ export function Composer({ onSendText, onSendFile, onSendAudio, onError }: Props
 
   if (recorder.recording) {
     return (
-      <div className="composer recording">
-        <button type="button" className="icon-button" onClick={recorder.cancel} aria-label="Cancelar gravação" title="Cancelar">
-          🗑
-        </button>
-        <span className="recording-indicator">
-          <span className="recording-dot" aria-hidden /> Gravando {formatDuration(recorder.seconds)}
-        </span>
-        <button type="button" className="send-button" onClick={() => void sendRecording()}>
-          Enviar áudio
-        </button>
+      <div className="composer">
+        <div className="composer-row">
+          <div className="recording">
+            <button type="button" className="icon-btn" onClick={recorder.cancel} aria-label="Descartar gravação" title="Descartar">
+              <Trash />
+            </button>
+            <span className="recording-indicator" role="status">
+              <span className="recording-dot" aria-hidden />
+              {formatDuration(recorder.seconds)}
+              <span className="wave" aria-hidden>
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              <span className="sr-only">Gravando áudio</span>
+            </span>
+          </div>
+          <button type="button" className="round-btn" onClick={() => void sendRecording()} aria-label="Enviar áudio" title="Enviar áudio">
+            <SendHorizontal />
+          </button>
+        </div>
       </div>
     );
   }
@@ -96,60 +121,84 @@ export function Composer({ onSendText, onSendFile, onSendAudio, onError }: Props
     >
       {file && (
         <div className="attachment">
+          {thumbnail ? (
+            <img className="attachment-thumb" src={thumbnail} alt="" />
+          ) : (
+            <span className="doc-icon" aria-hidden>
+              <FileText />
+            </span>
+          )}
           <span className="attachment-name">
-            {file.type.startsWith('image/') ? '📷' : '📄'} {file.name} <small>({formatSize(file.size)})</small>
+            <strong>{file.name}</strong>
+            <small>{formatSize(file.size)}</small>
           </span>
-          <button type="button" className="icon-button" onClick={() => setFile(null)} aria-label="Remover anexo">
-            ×
+          <button type="button" className="icon-btn" onClick={() => setFile(null)} aria-label="Remover anexo" disabled={sending}>
+            <X />
           </button>
         </div>
       )}
       <div className="composer-row">
-        <button
-          type="button"
-          className="icon-button"
-          onClick={() => fileInputRef.current?.click()}
-          aria-label="Anexar imagem ou documento"
-          title="Anexar imagem ou documento"
-          disabled={sending}
-        >
-          📎
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          hidden
-          onChange={(e) => {
-            pickFile(e.target.files?.[0]);
-            e.target.value = '';
-          }}
-        />
-        <textarea
-          ref={inputRef}
-          rows={1}
-          value={text}
-          placeholder={file ? 'Legenda (opcional)' : 'Digite uma mensagem'}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          autoFocus
-        />
+        <div className="composer-field">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Anexar imagem ou documento"
+            title="Anexar imagem ou documento"
+            disabled={sending}
+          >
+            <Paperclip />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            onChange={(e) => {
+              pickFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+          <textarea
+            ref={inputRef}
+            rows={1}
+            value={text}
+            placeholder={file ? 'Legenda (opcional)' : 'Digite uma mensagem'}
+            aria-label="Mensagem"
+            enterKeyHint={isTouchDevice ? 'enter' : 'send'}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !isTouchDevice && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            autoFocus={!isTouchDevice}
+          />
+        </div>
         {canSend || sending ? (
-          <button type="submit" className="send-button" disabled={sending}>
-            {sending ? 'Enviando…' : 'Enviar'}
+          <button type="submit" className="round-btn" disabled={sending} aria-label="Enviar" title="Enviar">
+            {sending ? <Spinner /> : <SendHorizontal />}
           </button>
         ) : (
-          <button type="button" className="icon-button mic-button" onClick={() => void recorder.start()} aria-label="Gravar áudio" title="Gravar áudio">
-            🎤
+          <button type="button" className="round-btn" onClick={() => void recorder.start()} aria-label="Gravar áudio" title="Gravar áudio">
+            <Mic />
           </button>
         )}
       </div>
     </form>
   );
+}
+
+// Endereço temporário para mostrar a miniatura da imagem escolhida (liberado ao trocar/remover).
+function useObjectUrl(blob: Blob | null): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!blob) return setUrl(null);
+    const created = URL.createObjectURL(blob);
+    setUrl(created);
+    return () => URL.revokeObjectURL(created);
+  }, [blob]);
+  return url;
 }
 
 // Grava áudio pelo microfone do navegador (WebM/Opus no Chrome e Edge; MP4 no Safari).

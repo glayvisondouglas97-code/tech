@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { accountsErrorHandler, authRouter } from './accounts.ts';
@@ -30,7 +31,15 @@ app.use('/api', requireAuth, apiRouter);
 
 // Site (frontend já compilado). No Docker fica em /app/public.
 const publicDir = process.env.PUBLIC_DIR ?? fileURLToPath(new URL('../public', import.meta.url));
-if (existsSync(publicDir)) app.use(express.static(publicDir));
+if (existsSync(publicDir)) {
+  // Arquivos com "hash" no nome (/assets) nunca mudam: o navegador guarda por 1 ano. O index.html é sempre conferido.
+  app.use(
+    express.static(publicDir, {
+      setHeaders: (res, file) =>
+        res.setHeader('Cache-Control', file.includes(`${sep}assets${sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache'),
+    }),
+  );
+}
 
 const server = app.listen(config.port, (error?: Error) => {
   if (error) {

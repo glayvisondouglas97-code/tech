@@ -194,6 +194,18 @@ por número em `backend/src/realtime.ts`.
 - **VPS**: `docker-compose.prod.yml` acrescenta o **Caddy** (HTTPS automático com Let's Encrypt) na frente do `app`,
   bloqueando `/webhook` para a internet. Passo a passo em `docs/DEPLOY.md`.
 
+## 4.6 Design (depois da Fase 7)
+
+- Visual refeito, no estilo de um SaaS: menu lateral com ícones e selos (não lidas e números desconectados),
+  busca por nome ou telefone, filtros por número em botões, avatares com iniciais, bolhas agrupadas, player de áudio
+  próprio (com velocidade), imagem em tela cheia, janelas e avisos rápidos, e modo escuro automático.
+- **Celular**: uma tela por vez, barra de menu embaixo, conversa em tela cheia, botão voltar do celular fecha a
+  conversa (a tela fica no endereço: `#12`, `#numeros`), janelas que sobem de baixo e ícone para a tela inicial
+  (manifesto de aplicativo).
+- **Desempenho**: só as linhas que mudaram são redesenhadas; linhas fora da tela não custam desenho; arquivos do site
+  com cache de 1 ano (o nome muda a cada versão); fonte e ícones instalados junto (sem depender de sites de fora).
+- Dependências novas só no frontend: `lucide-react` (ícones) e `@fontsource-variable/inter` (fonte).
+
 ## 5. Decisões tomadas
 
 1. **Histórico ao conectar um número**: importar o histórico recente que o WhatsApp envia ao conectar, só de
@@ -201,7 +213,7 @@ por número em `backend/src/realtime.ts`.
 2. **Tique azul (lida no WhatsApp)**: só marcar como lida no WhatsApp **quando a conversa for respondida pelo
    sistema**, nunca só por abrir. A instância fica com `readMessages = false`. O contador de não lidas *do
    sistema* zera ao abrir a conversa.
-3. **Lista de conversas**: duas abas, **Responderam** e **Todas**, mais o filtro por número.
+3. **Lista de conversas**: duas abas, **Responderam** e **Todas**, mais o filtro por número e a busca.
 4. **A mensagem inicial continua saindo pelo celular**: o MVP não terá o botão "nova conversa".
 5. **Usuários**: você e a equipe, cada um com login próprio e todos vendo todos os números (por enquanto).
 6. **Ambiente local**: Windows com Docker Desktop, com instruções em PowerShell.

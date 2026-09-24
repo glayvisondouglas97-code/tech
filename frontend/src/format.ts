@@ -51,3 +51,29 @@ export function dayLabel(iso: string): string {
   if (days === 1) return 'Ontem';
   return new Date(iso).toLocaleDateString('pt-BR');
 }
+
+// Iniciais para o avatar: "Maria Souza" → MS. Sem nome (só telefone), fica vazio e o avatar mostra um ícone.
+export function initials(name: string | null | undefined): string {
+  const words = (name ?? '').replace(/[^\p{L}\p{N}\s]/gu, '').split(/\s+/).filter((w) => /\p{L}/u.test(w));
+  if (words.length === 0) return '';
+  const first = words[0].charAt(0);
+  const last = words.length > 1 ? words.at(-1)!.charAt(0) : '';
+  return (first + last).toUpperCase();
+}
+
+// Tom de cor fixo para cada pessoa (mesmo nome = mesma cor). Evita os amarelos, que ficam apagados.
+const HUES = [0, 18, 32, 150, 168, 188, 205, 222, 245, 265, 290, 318, 340];
+export function hueOf(seed: string): number {
+  let hash = 0;
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  return HUES[Math.abs(hash) % HUES.length];
+}
+
+export function formatDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+export function formatSize(bytes: number): string {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}

@@ -1,7 +1,9 @@
+import { CircleAlert, CircleCheckBig, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api, type InstanceInfo, type QrCodeEvent } from '../api.ts';
 import { instanceLabel } from '../format.ts';
 import { useSocketEvent } from '../socket.ts';
+import { Modal, Spinner } from './ui.tsx';
 
 type Step = 'starting' | 'qrcode' | 'expired' | 'connected' | 'error';
 
@@ -53,63 +55,82 @@ export function QrModal({ instance, onClose }: { instance: InstanceInfo; onClose
   }, [instance.status]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  useEffect(() => {
     if (step !== 'connected') return;
     const timer = setTimeout(onClose, 2500);
     return () => clearTimeout(timer);
   }, [step, onClose]);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Conectar número" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-header">
-          <h2>Conectar {instanceLabel(instance)}</h2>
-          <button className="link-button" onClick={onClose} aria-label="Fechar">
-            ✕
-          </button>
-        </header>
+    <Modal
+      wide
+      title={`Conectar ${instanceLabel(instance)}`}
+      description="Escaneie o QR Code com o WhatsApp do celular deste número."
+      onClose={onClose}
+    >
+      <div className="qr-layout">
+        <ol className="qr-steps">
+          <li>
+            <span>
+              No celular deste número, abra o <strong>WhatsApp</strong>.
+            </span>
+          </li>
+          <li>
+            <span>
+              Toque em <strong>⋮ Mais opções</strong> (Android) ou em <strong>Configurações</strong> (iPhone).
+            </span>
+          </li>
+          <li>
+            <span>
+              Toque em <strong>Dispositivos conectados</strong> e depois em <strong>Conectar dispositivo</strong>.
+            </span>
+          </li>
+          <li>
+            <span>Aponte a câmera para o QR Code. Ele muda sozinho a cada poucos segundos.</span>
+          </li>
+        </ol>
 
-        {step === 'starting' && <p className="modal-status">Gerando o QR Code… (se o número já estava conectado antes, ele pode voltar sozinho)</p>}
-
-        {step === 'qrcode' && qrcode && (
-          <>
-            <img className="qrcode" src={qrcode} alt="QR Code para conectar o WhatsApp" />
-            <ol className="qr-steps">
-              <li>No celular deste número, abra o WhatsApp.</li>
-              <li>
-                Toque em <strong>⋮</strong> (Android) ou <strong>Configurações</strong> (iPhone) →{' '}
-                <strong>Dispositivos conectados</strong> → <strong>Conectar dispositivo</strong>.
-              </li>
-              <li>Aponte a câmera para este QR Code. Ele muda sozinho a cada poucos segundos.</li>
-            </ol>
-          </>
-        )}
-
-        {step === 'expired' && (
-          <div className="modal-status">
-            <p>O QR Code expirou.</p>
-            <button className="primary-button" onClick={() => void start()}>
-              Gerar novo QR Code
-            </button>
+        <div className="qr-panel">
+          <div className="qr-box">
+            {step === 'qrcode' && qrcode && <img className="qrcode" src={qrcode} alt="QR Code para conectar o WhatsApp" />}
+            {step === 'starting' && (
+              <div className="qr-waiting" role="status">
+                <Spinner />
+                Gerando o QR Code…
+                <small>Se o número já estava conectado antes, ele pode voltar sozinho.</small>
+              </div>
+            )}
+            {step === 'expired' && (
+              <div className="qr-waiting">
+                O QR Code expirou.
+                <button className="btn btn-primary btn-sm" onClick={() => void start()}>
+                  <RefreshCw aria-hidden /> Gerar novo
+                </button>
+              </div>
+            )}
+            {step === 'connected' && (
+              <div className="qr-waiting qr-success" role="status">
+                <CircleCheckBig aria-hidden />
+                <strong>Conectado!</strong>
+                As conversas deste número já aparecem na central.
+              </div>
+            )}
+            {step === 'error' && (
+              <div className="qr-waiting qr-failed" role="alert">
+                <CircleAlert aria-hidden />
+                {error}
+                <button className="btn btn-primary btn-sm" onClick={() => void start()}>
+                  <RefreshCw aria-hidden /> Tentar de novo
+                </button>
+              </div>
+            )}
           </div>
-        )}
-
-        {step === 'connected' && <p className="modal-status ok">✅ Conectado! As conversas deste número já aparecem na central.</p>}
-
-        {step === 'error' && (
-          <div className="modal-status">
-            <p className="form-error">{error}</p>
-            <button className="primary-button" onClick={() => void start()}>
-              Tentar de novo
-            </button>
-          </div>
-        )}
+          {step === 'qrcode' && (
+            <p className="qr-hint">
+              <RefreshCw aria-hidden /> O código se renova sozinho
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

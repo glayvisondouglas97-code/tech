@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { CircleCheckBig } from 'lucide-react';
+import { useState } from 'react';
 import { api } from '../api.ts';
+import { FormError, Modal, Spinner } from './ui.tsx';
 
 export function PasswordModal({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState('');
@@ -8,12 +10,6 @@ export function PasswordModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   const submit = async () => {
     setError(null);
@@ -29,44 +25,78 @@ export function PasswordModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Minha senha" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-header">
-          <h2>Minha senha</h2>
-          <button className="link-button" onClick={onClose} aria-label="Fechar">
-            ✕
+  if (done) {
+    return (
+      <Modal title="Minha senha" onClose={onClose}>
+        <div className="success-state">
+          <span className="empty-icon" aria-hidden>
+            <CircleCheckBig />
+          </span>
+          <strong>Senha trocada</strong>
+          <p>Os seus logins em outros aparelhos foram encerrados.</p>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-primary" onClick={onClose} autoFocus>
+            Pronto
           </button>
-        </header>
-        {done ? (
-          <p className="modal-status ok">✅ Senha trocada. Os seus logins em outros computadores foram encerrados.</p>
-        ) : (
-          <form
-            className="stack-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit();
-            }}
-          >
-            <label>
-              Senha atual
-              <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoFocus />
-            </label>
-            <label>
-              Senha nova (mínimo 8 caracteres)
-              <input type="password" autoComplete="new-password" minLength={8} value={next} onChange={(e) => setNext(e.target.value)} required />
-            </label>
-            <label>
-              Repita a senha nova
-              <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
-            </label>
-            {error && <p className="form-error">{error}</p>}
-            <button type="submit" className="primary-button" disabled={saving}>
-              {saving ? 'Salvando…' : 'Trocar senha'}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal title="Minha senha" description="Os seus logins em outros aparelhos serão encerrados." onClose={onClose}>
+      <form
+        className="modal-body"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <label className="field">
+          <span className="field-label">Senha atual</span>
+          <input
+            className="input"
+            type="password"
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            required
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Senha nova (mínimo 8 caracteres)</span>
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            required
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Repita a senha nova</span>
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+          />
+        </label>
+        {error && <FormError>{error}</FormError>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving && <Spinner />} Trocar senha
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

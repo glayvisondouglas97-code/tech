@@ -28,6 +28,9 @@ export type ChatMessage = {
 
 export type Tab = 'responderam' | 'todas';
 
+// Selos do menu: conversas com mensagens não lidas e números desconectados.
+export type Stats = { unreadConversations: number; disconnectedInstances: number };
+
 export const PAGE_SIZE = 50;
 
 export type CurrentUser = { id: number; name: string; email: string; isAdmin: boolean; active: boolean };
@@ -94,8 +97,10 @@ export const api = {
 
   instances: () => request<InstanceInfo[]>('/instances'),
 
-  conversations: (params: { tab: Tab; instanceId?: number; cursor?: number; limit?: number }) =>
+  conversations: (params: { tab: Tab; instanceId?: number; q?: string; cursor?: number; limit?: number }) =>
     request<ConversationItem[]>(`/conversations?${query(params)}`),
+
+  stats: () => request<Stats>('/stats'),
 
   conversation: (id: number) => request<ConversationItem>(`/conversations/${id}`),
 

@@ -1,126 +1,180 @@
+import { Inbox, Search, SearchX, WifiOff, X } from 'lucide-react';
+import { memo, useMemo, type CSSProperties, type UIEvent } from 'react';
 import type { ConversationsState } from '../App.tsx';
-import type { CurrentUser, InstanceInfo, Tab } from '../api.ts';
+import type { ConversationItem, InstanceInfo, Tab } from '../api.ts';
 import { contactName, formatPhone, instanceColor, instanceLabel, listTime } from '../format.ts';
 import { useOnline } from '../socket.ts';
+import { Avatar, EmptyState, InstanceChip } from './ui.tsx';
 
 type Props = {
-  user: CurrentUser;
-  onOpenNumbers: () => void;
-  onOpenUsers: () => void;
-  onChangePassword: () => void;
-  onLogout: () => void;
   tab: Tab;
   onTabChange: (tab: Tab) => void;
   instances: InstanceInfo[];
   instanceId: number | null;
   onInstanceChange: (id: number | null) => void;
+  search: string;
+  onSearchChange: (value: string) => void;
+  query: string;
   conversations: ConversationsState;
   selectedId: number | null;
   onSelect: (id: number) => void;
 };
 
 export function ConversationList(props: Props) {
-  const { user, onOpenNumbers, onOpenUsers, onChangePassword, onLogout } = props;
-  const { tab, onTabChange, instances, instanceId, onInstanceChange, conversations, selectedId, onSelect } = props;
+  const { tab, onTabChange, instances, instanceId, onInstanceChange, search, onSearchChange, query } = props;
+  const { conversations, selectedId, onSelect } = props;
   const online = useOnline();
-  const disconnected = instances.filter((i) => i.status !== 'open').length;
-  // Apelido e cor vêm da lista de números (atualizada em tempo real), não da conversa.
-  const liveInstance = (i: { id: number; name: string; nickname: string | null }) => instances.find((x) => x.id === i.id) ?? i;
+  // Apelido do número vem da lista de números (atualizada em tempo real), não da conversa.
+  const labels = useMemo(() => new Map(instances.map((i) => [i.id, instanceLabel(i)])), [instances]);
 
-  const onScroll = (e: React.UIEvent<HTMLUListElement>) => {
+  const onScroll = (e: UIEvent<HTMLUListElement>) => {
     const el = e.currentTarget;
-    if (conversations.hasMore && el.scrollHeight - el.scrollTop - el.clientHeight < 200) conversations.loadMore();
+    if (conversations.hasMore && el.scrollHeight - el.scrollTop - el.clientHeight < 400) conversations.loadMore();
   };
 
   return (
-    <aside className="sidebar">
-      <header className="sidebar-header">
-        <h1>Conversas</h1>
-        <button className={`numbers-button ${disconnected ? 'warn' : ''}`} onClick={onOpenNumbers}>
-          Números{disconnected > 0 && ` · ${disconnected} desconectado${disconnected > 1 ? 's' : ''}`}
-        </button>
+    <aside className="list-panel">
+      <header className="list-header">
+        <div className="list-title">
+          <h1>Conversas</h1>
+        </div>
+
+        <div className="search" role="search">
+          <Search aria-hidden />
+          <input
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            value={search}
+            maxLength={60}
+            placeholder="Buscar por nome ou telefone"
+            aria-label="Buscar conversa por nome ou telefone"
+            onChange={(e) => onSearchChange(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && onSearchChange('')}
+          />
+          {search && (
+            <button type="button" className="icon-btn" onClick={() => onSearchChange('')} aria-label="Limpar busca">
+              <X />
+            </button>
+          )}
+        </div>
+
+        <div className="segmented" role="tablist" aria-label="Quais conversas mostrar">
+          <button role="tab" aria-selected={tab === 'responderam'} onClick={() => onTabChange('responderam')}>
+            Responderam
+          </button>
+          <button role="tab" aria-selected={tab === 'todas'} onClick={() => onTabChange('todas')}>
+            Todas
+          </button>
+        </div>
+
+        {instances.length > 1 && (
+          <div className="filter-chips" role="group" aria-label="Filtrar por número">
+            <button className="filter-chip" aria-pressed={instanceId === null} onClick={() => onInstanceChange(null)}>
+              Todos os números
+            </button>
+            {instances.map((i) => (
+              <button
+                key={i.id}
+                className="filter-chip"
+                aria-pressed={instanceId === i.id}
+                onClick={() => onInstanceChange(instanceId === i.id ? null : i.id)}
+              >
+                <span className="chip-dot" style={{ '--instance-color': instanceColor(i.id) } as CSSProperties} aria-hidden />
+                {instanceLabel(i)}
+                {i.status !== 'open' && <WifiOff className="off" aria-label="desconectado" />}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       {!online && (
-        <div className="offline-banner" role="status">
-          Sem conexão com o servidor. Tentando reconectar… As mensagens novas aparecem assim que voltar.
+        <div className="offline" role="status">
+          <WifiOff aria-hidden />
+          Sem conexão com o servidor. Tentando reconectar…
         </div>
       )}
 
-      <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'responderam'} onClick={() => onTabChange('responderam')}>
-          Responderam
-        </button>
-        <button role="tab" aria-selected={tab === 'todas'} onClick={() => onTabChange('todas')}>
-          Todas
-        </button>
-      </div>
-
-      <label className="filter">
-        <span>Número</span>
-        <select value={instanceId ?? ''} onChange={(e) => onInstanceChange(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">Todos os números</option>
-          {instances.map((i) => (
-            <option key={i.id} value={i.id}>
-              {instanceLabel(i)}
-              {i.status !== 'open' ? ' (desconectado)' : ''}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <ul className="conversation-list" onScroll={onScroll}>
-        {conversations.items.map((c) => {
-          const name = contactName(c.contact);
-          return (
-            <li key={c.id}>
-              <button className={`conversation ${c.id === selectedId ? 'selected' : ''}`} onClick={() => onSelect(c.id)}>
-                <span className="avatar" aria-hidden>
-                  {c.contact.name?.replace(/[^\p{L}\p{N}]/gu, '').charAt(0).toUpperCase() || '#'}
-                </span>
-                <span className="conversation-main">
-                  <span className="conversation-top">
-                    <span className="conversation-name">{name}</span>
-                    <span className={`conversation-time ${c.unreadCount ? 'unread' : ''}`}>{listTime(c.lastMessageAt)}</span>
-                  </span>
-                  {c.contact.name && c.contact.phone && <span className="conversation-phone">{formatPhone(c.contact.phone)}</span>}
-                  <span className="conversation-bottom">
-                    <span className="conversation-preview">
-                      {c.lastMessageFromMe && <span className="preview-me">Você: </span>}
-                      {c.lastMessagePreview}
-                    </span>
-                    {c.unreadCount > 0 && <span className="unread-badge">{c.unreadCount}</span>}
-                  </span>
-                  <span className="instance-badge" style={{ '--instance-color': instanceColor(c.instance.id) } as React.CSSProperties}>
-                    {instanceLabel(liveInstance(c.instance))}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-        {conversations.loading && <li className="list-info">Carregando…</li>}
+      <ul className="conversation-list" onScroll={onScroll} aria-busy={conversations.loading}>
+        {conversations.items.map((c) => (
+          <li key={c.id}>
+            <ConversationRow
+              conversation={c}
+              label={labels.get(c.instance.id) ?? instanceLabel(c.instance)}
+              selected={c.id === selectedId}
+              onSelect={onSelect}
+            />
+          </li>
+        ))}
+        {conversations.loading && <SkeletonRows />}
         {!conversations.loading && conversations.items.length === 0 && (
-          <li className="list-info">{tab === 'responderam' ? 'Nenhum lead respondeu ainda.' : 'Nenhuma conversa.'}</li>
+          <li>
+            {query ? (
+              <EmptyState icon={SearchX} title={`Nada encontrado para “${query}”`}>
+                {tab === 'responderam' ? 'Procure também na aba Todas.' : 'Confira o nome ou digite parte do telefone.'}
+              </EmptyState>
+            ) : tab === 'responderam' ? (
+              <EmptyState icon={Inbox} title="Nenhum lead respondeu ainda">
+                Quando alguém responder, a conversa aparece aqui. As demais ficam na aba Todas.
+              </EmptyState>
+            ) : (
+              <EmptyState icon={Inbox} title="Nenhuma conversa ainda">
+                As conversas dos números conectados aparecem aqui.
+              </EmptyState>
+            )}
+          </li>
         )}
       </ul>
-
-      <footer className="sidebar-footer">
-        <span className="sidebar-user" title={user.email}>
-          👤 {user.name}
-        </span>
-        <button className="link-button" onClick={onChangePassword}>
-          Minha senha
-        </button>
-        {user.isAdmin && (
-          <button className="link-button" onClick={onOpenUsers}>
-            Usuários
-          </button>
-        )}
-        <button className="link-button" onClick={onLogout}>
-          Sair
-        </button>
-      </footer>
     </aside>
   );
+}
+
+type RowProps = { conversation: ConversationItem; label: string; selected: boolean; onSelect: (id: number) => void };
+
+// Só redesenha a linha que mudou (importante com muitas conversas e mensagens chegando o tempo todo).
+const ConversationRow = memo(function ConversationRow({ conversation: c, label, selected, onSelect }: RowProps) {
+  const unread = c.unreadCount > 0;
+  return (
+    <button
+      className={`conversation ${selected ? 'selected' : ''} ${unread ? 'unread' : ''}`}
+      aria-current={selected || undefined}
+      onClick={() => onSelect(c.id)}
+    >
+      <Avatar name={c.contact.name} seed={c.contact.phone ?? String(c.contact.id)} />
+      <span className="conversation-main">
+        <span className="conversation-top">
+          <span className="conversation-name">{contactName(c.contact)}</span>
+          <span className="conversation-time">{listTime(c.lastMessageAt)}</span>
+        </span>
+        <span className="conversation-bottom">
+          <span className="conversation-preview">
+            {c.lastMessageFromMe && <span className="preview-me">Você:</span>}
+            <span>{c.lastMessagePreview || ' '}</span>
+          </span>
+          {unread && (
+            <span className="unread-badge" aria-label={`${c.unreadCount} não lidas`}>
+              {c.unreadCount > 99 ? '99+' : c.unreadCount}
+            </span>
+          )}
+        </span>
+        <span className="conversation-meta">
+          <InstanceChip id={c.instance.id} label={label} />
+          {c.contact.name && c.contact.phone && <span className="conversation-phone">{formatPhone(c.contact.phone)}</span>}
+        </span>
+      </span>
+    </button>
+  );
+});
+
+function SkeletonRows() {
+  return Array.from({ length: 7 }, (_, i) => (
+    <li key={`s${i}`} className="skeleton-row" aria-hidden>
+      <span className="avatar" />
+      <span className="skeleton-lines">
+        <span className="skeleton-line" style={{ width: `${45 + ((i * 17) % 35)}%` }} />
+        <span className="skeleton-line" style={{ width: `${65 + ((i * 11) % 30)}%` }} />
+      </span>
+    </li>
+  ));
 }
