@@ -1,13 +1,6 @@
-import type { ChatMessage } from '../api.ts';
+import { useState } from 'react';
+import { mediaUrl, type ChatMessage } from '../api.ts';
 import { timeOf } from '../format.ts';
-
-// Rótulo das mídias. Os players (áudio, imagem, documento) chegam na Fase 6.
-const MEDIA_LABEL: Partial<Record<ChatMessage['type'], string>> = {
-  audio: '🎤 Mensagem de voz',
-  image: '📷 Imagem',
-  video: '🎥 Vídeo',
-  sticker: '🙂 Figurinha',
-};
 
 function StatusTicks({ status }: { status: string | null }) {
   switch (status) {
@@ -27,6 +20,41 @@ function StatusTicks({ status }: { status: string | null }) {
   }
 }
 
+// Imagem/figurinha: carrega só quando aparece na tela. Clicar abre em tamanho real.
+function MediaImage({ url, sticker }: { url: string; sticker?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <div className="media-label">{sticker ? '🙂 Figurinha' : '📷 Imagem'} indisponível</div>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer">
+      <img className={sticker ? 'media-sticker' : 'media-image'} src={url} alt={sticker ? 'Figurinha' : 'Imagem'} loading="lazy" onError={() => setFailed(true)} />
+    </a>
+  );
+}
+
+function MediaContent({ message }: { message: ChatMessage }) {
+  const url = mediaUrl(message.id);
+  switch (message.type) {
+    case 'image':
+      return <MediaImage url={url} />;
+    case 'sticker':
+      return <MediaImage url={url} sticker />;
+    case 'audio':
+      return <audio className="media-audio" controls preload="none" src={url} />;
+    case 'video':
+      return <video className="media-video" controls preload="none" src={url} />;
+    case 'document':
+      return (
+        <a className="media-document" href={url} download={message.fileName ?? true}>
+          <span aria-hidden>📄</span>
+          <span className="media-document-name">{message.fileName ?? 'Documento'}</span>
+          <span className="media-document-action">Baixar</span>
+        </a>
+      );
+    default:
+      return null;
+  }
+}
+
 export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.type === 'reaction') {
     return (
@@ -36,11 +64,9 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
     );
   }
 
-  const label = message.type === 'document' ? `📄 ${message.fileName ?? 'Documento'}` : MEDIA_LABEL[message.type];
-
   return (
-    <div className={`bubble ${message.fromMe ? 'mine' : 'theirs'}`}>
-      {label && <div className="media-label">{label}</div>}
+    <div className={`bubble ${message.fromMe ? 'mine' : 'theirs'} ${message.type === 'sticker' ? 'bubble-sticker' : ''}`}>
+      <MediaContent message={message} />
       {message.text && <div className="bubble-text">{message.text}</div>}
       <span className="bubble-meta">
         {timeOf(message.sentAt)}

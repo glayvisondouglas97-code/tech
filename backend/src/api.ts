@@ -3,12 +3,14 @@ import express, { Router, type NextFunction, type Request, type Response } from 
 import { prisma } from './db.ts';
 import { evolution, EvolutionError } from './evolution.ts';
 import { conversationDto, instanceDto, messageDto } from './dto.ts';
-import type { Instance, Prisma } from './generated/prisma/client.ts';
+import type { Instance, Message, Prisma } from './generated/prisma/client.ts';
 import { importHistory } from './history.ts';
+import { baseMime, ensureMedia, holdMedia, isInline, isMediaMessage, mediaFile, storeMedia } from './media.ts';
 import { enqueue } from './queue.ts';
 import { nextInstanceName } from './instances.ts';
 import { publishConversation, publishInstance } from './realtime.ts';
 import { saveMessage, upsertInstance } from './store.ts';
+import type { WaMessage } from './whatsapp.ts';
 
 class HttpError extends Error {
   status: number;
@@ -152,11 +154,76 @@ apiRouter.post('/conversations/:id/read', async (req, res) => {
 
 // Envia texto pelo mesmo número da conversa.
 apiRouter.post('/conversations/:id/messages', async (req, res) => {
-  const id = parseId(req.params.id);
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) throw new HttpError(400, 'Mensagem vazia');
+  const message = await sendToConversation(parseId(req.params.id), (instance, number) => evolution.sendText(instance, number, text));
+  res.status(201).json(messageDto(message));
+});
 
-  const conversation = await prisma.conversation.findUnique({ where: { id }, include: { contact: true, instance: true } });
+// Arquivos chegam como o próprio corpo da requisição (sem formulário), com o tipo no Content-Type.
+const MAX_UPLOAD = '25mb';
+const rawBody = express.raw({ type: () => true, limit: MAX_UPLOAD });
+
+function uploadedFile(req: Request): { data: Buffer; mime: string } {
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) throw new HttpError(400, 'Arquivo vazio');
+  return { data: req.body, mime: baseMime(req.get('content-type')) || 'application/octet-stream' };
+}
+
+// Áudio gravado no navegador (WebM/MP4). Sai como mensagem de voz: a Evolution converte para OGG/Opus.
+apiRouter.post('/conversations/:id/audio', rawBody, async (req, res) => {
+  const file = uploadedFile(req);
+  if (!file.mime.startsWith('audio/')) throw new HttpError(400, 'Formato de áudio inválido');
+  const message = await sendToConversation(
+    parseId(req.params.id),
+    (instance, number) => evolution.sendAudio(instance, number, file.data.toString('base64')),
+    file,
+  );
+  res.status(201).json(messageDto(message));
+});
+
+// Imagem (JPEG/PNG/WebP) ou qualquer outro arquivo, como documento. ?fileName=...&caption=...
+apiRouter.post('/conversations/:id/media', rawBody, async (req, res) => {
+  const file = uploadedFile(req);
+  const fileName = String(req.query.fileName ?? '').replace(/[\\/\u0000-\u001f]/g, '').slice(0, 200) || 'arquivo';
+  const caption = typeof req.query.caption === 'string' ? req.query.caption.trim().slice(0, 1000) || undefined : undefined;
+  const mediatype = /^image\/(jpeg|png|webp)$/.test(file.mime) ? 'image' : 'document';
+  const message = await sendToConversation(
+    parseId(req.params.id),
+    (instance, number) =>
+      evolution.sendMedia(instance, number, { mediatype, mimetype: file.mime, fileName, caption, base64: file.data.toString('base64') }),
+    file,
+  );
+  res.status(201).json(messageDto(message));
+});
+
+// Abre a mídia de uma mensagem. Se ainda não estiver no disco, baixa pela Evolution primeiro.
+apiRouter.get('/messages/:id/media', async (req, res) => {
+  const message = await prisma.message.findUnique({ where: { id: parseId(req.params.id) } });
+  if (!message || !isMediaMessage(message)) throw new HttpError(404, 'Mídia não encontrada');
+  let stored;
+  try {
+    stored = await ensureMedia(message);
+  } catch (error) {
+    console.error(`[mídia] mensagem ${message.id}:`, (error as Error).message);
+    throw new HttpError(502, 'Mídia indisponível');
+  }
+  const mime = stored.mediaMime ?? 'application/octet-stream';
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  if (!isInline(mime)) res.attachment(stored.fileName ?? 'arquivo');
+  res.type(mime);
+  res.sendFile(mediaFile(stored)!);
+});
+
+// Envia pelo mesmo número da conversa, grava a mensagem (e o arquivo, se houver) e marca como lidas
+// no WhatsApp as mensagens do lead que foram respondidas.
+async function sendToConversation(
+  conversationId: number,
+  send: (instanceName: string, number: string) => Promise<WaMessage>,
+  media?: { data: Buffer; mime: string },
+): Promise<Message> {
+  const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, include: { contact: true, instance: true } });
   if (!conversation) throw new HttpError(404, 'Conversa não encontrada');
   const number = conversation.contact.phoneJid ?? conversation.contact.lidJid;
   if (!number) throw new HttpError(400, 'Contato sem número');
@@ -165,7 +232,7 @@ apiRouter.post('/conversations/:id/messages', async (req, res) => {
 
   let sent;
   try {
-    sent = await evolution.sendText(conversation.instance.name, number, text);
+    sent = await send(conversation.instance.name, number);
   } catch (error) {
     if (error instanceof EvolutionError) {
       console.error('[envio]', error.message);
@@ -174,20 +241,33 @@ apiRouter.post('/conversations/:id/messages', async (req, res) => {
     throw error;
   }
 
-  // O webhook de confirmação pode chegar antes desta linha; nesse caso a mensagem já está salva.
-  const saved = await enqueue(() => saveMessage(conversation.instance.name, sent, { live: true, conversationId: conversation.id }));
-  const message =
-    saved?.message ??
-    (await prisma.message.findUniqueOrThrow({
-      where: { instanceId_waId: { instanceId: conversation.instanceId, waId: sent.key.id } },
-    }));
+  // Se for arquivo, quem pedir a mídia antes da gravação terminar espera por ela (ver holdMedia).
+  let stored: { resolve: (m: Message) => void; reject: (e: unknown) => void } | undefined;
+  if (media) {
+    holdMedia(conversation.instanceId, sent.key.id, new Promise<Message>((resolve, reject) => (stored = { resolve, reject })));
+  }
+  try {
+    // O webhook de confirmação pode chegar antes desta linha; nesse caso a mensagem já está salva.
+    const saved = await enqueue(() => saveMessage(conversation.instance.name, sent, { live: true, conversationId: conversation.id }));
+    let message =
+      saved?.message ??
+      (await prisma.message.findUniqueOrThrow({
+        where: { instanceId_waId: { instanceId: conversation.instanceId, waId: sent.key.id } },
+      }));
+    if (media) {
+      message = await storeMedia(message, media.data, media.mime);
+      stored?.resolve(message);
+    }
 
-  markRepliedAsRead(conversation.instance.name, conversation.id, conversation.contact.phoneJid, message.id).catch((error) =>
-    console.error(`[envio] não foi possível marcar como lida a conversa ${conversation.id}:`, (error as Error).message),
-  );
-
-  res.status(201).json(messageDto(message));
-});
+    markRepliedAsRead(conversation.instance.name, conversation.id, conversation.contact.phoneJid, message.id).catch((error) =>
+      console.error(`[envio] não foi possível marcar como lida a conversa ${conversation.id}:`, (error as Error).message),
+    );
+    return message;
+  } catch (error) {
+    stored?.reject(error);
+    throw error;
+  }
+}
 
 // Confere se o número está conectado antes de enviar. Se o status salvo não for "open", confirma na hora com a Evolution.
 async function ensureConnected(instance: Instance): Promise<void> {
@@ -224,6 +304,10 @@ apiRouter.post('/instances/:name/import-history', async (req, res) => {
 });
 
 apiRouter.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
+  if ((error as { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({ error: `Arquivo muito grande (máximo ${MAX_UPLOAD.replace('mb', ' MB')})` });
+    return;
+  }
   const status = error instanceof HttpError ? error.status : 500;
   if (status === 500) console.error('[api]', error);
   res.status(status).json({ error: status === 500 ? 'Erro interno' : error.message });

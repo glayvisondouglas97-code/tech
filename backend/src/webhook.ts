@@ -4,6 +4,7 @@ import express, { Router } from 'express';
 import { config } from './config.ts';
 import { prisma } from './db.ts';
 import { scheduleHistoryImport } from './history.ts';
+import { isMediaMessage, scheduleMediaDownload } from './media.ts';
 import { enqueue } from './queue.ts';
 import { publishQrCode } from './realtime.ts';
 import { saveMessage, updateMessageStatus, upsertInstance } from './store.ts';
@@ -42,7 +43,9 @@ async function handleEvent(event: string, instanceName: string, data: any): Prom
     case 'messages.upsert': // recebida, ou enviada pelo celular
     case 'send.message': // enviada pelo sistema
       for (const message of (Array.isArray(data) ? data : [data]) as WaMessage[]) {
-        await enqueue(() => saveMessage(instanceName, message, { live: true }));
+        const saved = await enqueue(() => saveMessage(instanceName, message, { live: true }));
+        // Áudio/imagem/documento recebido (ou enviado pelo celular): já baixa o arquivo em segundo plano.
+        if (saved && event === 'messages.upsert' && isMediaMessage(saved.message)) scheduleMediaDownload(saved.message);
       }
       return;
     case 'messages.update':

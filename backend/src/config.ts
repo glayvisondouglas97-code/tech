@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Variável de ambiente ${name} não definida`);
@@ -14,4 +16,6 @@ export const config = {
   webhookToken: required('WEBHOOK_TOKEN'),
   // Quantos dias de histórico importar ao conectar um número.
   historyDays: Number(process.env.HISTORY_DAYS ?? 14),
+  // Pasta das mídias (áudios, imagens, documentos). No Docker é um volume próprio.
+  mediaDir: process.env.MEDIA_DIR ?? fileURLToPath(new URL('../media', import.meta.url)),
 };

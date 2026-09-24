@@ -21,6 +21,7 @@ export type ChatMessage = {
   type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'reaction' | 'other';
   text: string | null;
   fileName: string | null;
+  mediaMime: string | null;
   status: string | null;
   sentAt: string;
 };
@@ -40,6 +41,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return response.status === 204 ? (undefined as T) : response.json();
 }
+
+// Envia um arquivo como o próprio corpo da requisição (o backend lê o tipo pelo Content-Type).
+async function upload<T>(path: string, body: Blob): Promise<T> {
+  const response = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': body.type || 'application/octet-stream' },
+    body,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error ?? `Erro ${response.status}`);
+  }
+  return response.json();
+}
+
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+export const mediaUrl = (messageId: number) => `/api/messages/${messageId}/media`;
 
 function query(params: Record<string, string | number | undefined>): string {
   const entries = Object.entries(params).filter((e): e is [string, string | number] => e[1] !== undefined);
@@ -61,6 +80,11 @@ export const api = {
 
   sendText: (id: number, text: string) =>
     request<ChatMessage>(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ text }) }),
+
+  sendAudio: (id: number, audio: Blob) => upload<ChatMessage>(`/conversations/${id}/audio`, audio),
+
+  sendFile: (id: number, file: File, caption: string) =>
+    upload<ChatMessage>(`/conversations/${id}/media?${query({ fileName: file.name, caption: caption || undefined })}`, file),
 
   createInstance: (nickname: string) =>
     request<InstanceInfo>('/instances', { method: 'POST', body: JSON.stringify({ nickname }) }),

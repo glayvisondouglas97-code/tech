@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 a 4 concluídas e testadas pelo usuário. Fase 5 (tela de números) entregue, aguardando teste.**
+Status: **Fases 1 a 5 concluídas e testadas pelo usuário. Fase 6 (mídia) entregue, aguardando teste.**
 
 ## 1. Versão da Evolution API
 
@@ -97,7 +97,7 @@ O `Contact` fica separado da conversa porque o mesmo lead pode falar com vários
 ideias futuras ("não contatar", aviso de lead em outro número, relatórios) sem precisar implementá-las agora.
 
 Dependências previstas (mínimo):
-- backend: express, prisma + @prisma/client + @prisma/adapter-pg + pg (o Prisma 7 exige o driver), socket.io e multer (upload, Fase 6). O TypeScript roda direto no Node 24, sem tsx nem etapa de build;
+- backend: express, prisma + @prisma/client + @prisma/adapter-pg + pg (o Prisma 7 exige o driver), socket.io. Os uploads de mídia chegam como o próprio corpo da requisição, então o multer não foi necessário. O TypeScript roda direto no Node 24, sem tsx nem etapa de build;
 - frontend: react, react-dom, socket.io-client e vite;
 - senhas com `crypto.scrypt`, nativo do Node, sem biblioteca.
 
@@ -159,6 +159,20 @@ por número em `backend/src/realtime.ts`.
   de 30 QR Codes sem leitura (`QRCODE_LIMIT`), a tela mostra "expirou" e oferece gerar outro.
 - **Apelido**: fica só no nosso banco e aparece na hora em todas as telas.
 - Não há botão de remover ou desconectar número no MVP. Se precisar, dá para fazer pelo painel da Evolution.
+
+## 4.4 Como a Fase 6 (mídia) funciona
+
+- **Arquivos no volume `media_data`** (`/app/media/<número>/<mensagem>.<ext>`). O banco guarda só o caminho e o tipo.
+- **Recebidas ao vivo** (`messages.upsert`): o backend baixa a mídia logo, em segundo plano, pela Evolution
+  (`POST /chat/getBase64FromMediaMessage`, que descriptografa o arquivo do WhatsApp).
+- **Histórico**: a mídia só é baixada quando alguém abre (decisão da Fase 0).
+- **Áudio gravado**: o navegador grava em WebM/Opus (Chrome/Edge) e o backend envia para
+  `POST /message/sendWhatsAppAudio`. A Evolution converte para OGG/Opus com o ffmpeg dela e manda como mensagem de
+  voz. Conferido: o ffmpeg da imagem v2.3.7 converte WebM → OGG/Opus mono 48 kHz. O nosso backend não tem ffmpeg.
+- **Imagem/documento**: `POST /message/sendMedia`. JPG/PNG/WebP vão como imagem (a Evolution converte para JPEG); o
+  resto vai como documento, com o nome do arquivo. Limite de 25 MB por arquivo.
+- **Segurança**: só imagem, áudio e vídeo abrem dentro da página. Qualquer outro tipo (ex.: HTML ou SVG enviado por um
+  lead) é sempre baixado, com `nosniff` e `sandbox`, para nunca rodar dentro do sistema.
 
 ## 5. Decisões tomadas
 

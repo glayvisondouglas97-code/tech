@@ -20,7 +20,9 @@ export type WaMessage = {
 
 export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'reaction' | 'other';
 
-export type ParsedContent = { type: MessageType; text: string | null; fileName: string | null };
+export type ParsedContent = { type: MessageType; text: string | null; fileName: string | null; mimetype: string | null };
+
+export const MEDIA_TYPES: ReadonlySet<MessageType> = new Set(['image', 'video', 'audio', 'document', 'sticker']);
 
 // Remove o sufixo de aparelho: "5511999999999:12@s.whatsapp.net" → "5511999999999@s.whatsapp.net".
 export function normalizeJid(jid: string): string {
@@ -77,6 +79,7 @@ export function parseContent(msg: Pick<WaMessage, 'message' | 'messageType'>): P
     type: t,
     text: text || null,
     fileName: fileName || null,
+    mimetype: MEDIA_TYPES.has(t) && typeof content.mimetype === 'string' ? content.mimetype : null,
   });
 
   switch (type) {

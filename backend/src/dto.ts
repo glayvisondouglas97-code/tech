@@ -21,6 +21,6 @@ export function conversationDto(c: Conversation & { contact: Contact; instance: 
 }
 
 export function messageDto(m: Message) {
-  const { instanceId, remoteJid, ...rest } = m;
+  const { instanceId, remoteJid, mediaPath, ...rest } = m;
   return rest;
 }

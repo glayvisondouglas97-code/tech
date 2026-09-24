@@ -96,8 +96,12 @@ services:
       WEBHOOK_URL: http://app:3000/webhook/evolution
       WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?defina WEBHOOK_TOKEN no arquivo .env}
       HISTORY_DAYS: 14
+    volumes:
+      # Áudios, imagens e documentos (os arquivos ficam aqui, não no banco).
+      - media_data:/app/media
 
 volumes:
   postgres_data:
   redis_data:
   evolution_instances:
+  media_data:

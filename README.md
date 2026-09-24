@@ -92,7 +92,13 @@ Abra **<http://localhost:3100>** no navegador.
 - Abrir a conversa zera as não lidas **no sistema**. O tique azul só vai para o lead quando alguém responde.
 - Mensagens novas, status (entregue/lida) e contadores aparecem na hora, em todas as telas abertas. Se a conexão cair,
   aparece um aviso amarelo; quando ela volta, a tela busca sozinha o que chegou nesse meio tempo.
-- Áudios, imagens e documentos aparecem como rótulo (ex.: "🎤 Mensagem de voz"). Ouvir e ver vem na Fase 6.
+- **Áudio**: com a caixa de texto vazia, clique em 🎤 para gravar. Aparece "Gravando 0:05"; clique em **Enviar áudio**
+  (ou 🗑 para descartar). O áudio chega no WhatsApp do lead como **mensagem de voz**. Na primeira vez, o navegador pede
+  permissão para usar o microfone.
+- **Imagem ou documento**: clique em 📎, escolha o arquivo (até 25 MB), escreva uma legenda se quiser e envie. JPG, PNG
+  e WebP vão como imagem; qualquer outro arquivo (PDF, planilha etc.) vai como documento.
+- **Mídias recebidas**: áudios têm player, imagens aparecem no chat (clique para ampliar) e documentos têm o botão
+  **Baixar**. As mídias ficam guardadas no volume `media_data` do Docker (não no banco).
 
 ## Como atualizar (a cada nova fase)
 
@@ -113,6 +119,9 @@ Dá para abrir as rotas `GET` direto no navegador.
 | `GET /api/conversations/ID/messages` | Mensagens de uma conversa |
 | `POST /api/conversations/ID/messages` | Envia texto (`{"text": "..."}`) pelo mesmo número da conversa |
 | `POST /api/conversations/ID/read` | Zera as não lidas no sistema (não manda tique azul) |
+| `POST /api/conversations/ID/audio` | Envia áudio gravado (corpo = arquivo de áudio) como mensagem de voz |
+| `POST /api/conversations/ID/media?fileName=...&caption=...` | Envia imagem ou documento (corpo = arquivo) |
+| `GET /api/messages/ID/media` | Abre/baixa a mídia de uma mensagem |
 | `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções |
 | `PATCH /api/instances/ID` | Troca o apelido de um número |
 | `POST /api/instances/ID/connect` | Conecta/reconecta um número (o QR Code chega em tempo real) |
@@ -128,8 +137,8 @@ Dá para abrir as rotas `GET` direto no navegador.
 | `docker compose down` | Para tudo. **Os dados continuam salvos** |
 | `docker compose up -d` | Sobe tudo de novo |
 
-> ⚠️ **Nunca** rode `docker compose down -v`: o `-v` apaga os volumes, ou seja, o banco de dados e as sessões
-> dos números. Seria preciso escanear todos os QR Codes de novo.
+> ⚠️ **Nunca** rode `docker compose down -v`: o `-v` apaga os volumes, ou seja, o banco de dados, as mídias e as
+> sessões dos números. Seria preciso escanear todos os QR Codes de novo.
 
 ## Problemas comuns
 

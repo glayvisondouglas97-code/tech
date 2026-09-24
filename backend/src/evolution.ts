@@ -125,6 +125,32 @@ export const evolution = {
   sendText: (instance: string, number: string, text: string) =>
     call<WaMessage>('POST', path('/message/sendText', instance), { number, text }),
 
+  // Mensagem de voz: a Evolution converte qualquer formato (ex.: WebM do navegador) para OGG/Opus com ffmpeg.
+  sendAudio: (instance: string, number: string, audioBase64: string) =>
+    call<WaMessage>('POST', path('/message/sendWhatsAppAudio', instance), { number, audio: audioBase64 }),
+
+  // Imagem (a Evolution converte para JPEG) ou documento.
+  sendMedia: (
+    instance: string,
+    number: string,
+    media: { mediatype: 'image' | 'document'; mimetype: string; fileName: string; caption?: string; base64: string },
+  ) =>
+    call<WaMessage>('POST', path('/message/sendMedia', instance), {
+      number,
+      mediatype: media.mediatype,
+      mimetype: media.mimetype,
+      fileName: media.fileName,
+      caption: media.caption,
+      media: media.base64,
+    }),
+
+  // Baixa (e descriptografa) a mídia de uma mensagem que está no banco da Evolution.
+  downloadMedia: (instance: string, waId: string) =>
+    call<{ base64: string; mimetype?: string; fileName?: string }>('POST', path('/chat/getBase64FromMediaMessage', instance), {
+      message: { key: { id: waId } },
+      convertToMp4: false,
+    }),
+
   // A Evolution só aceita chaves com o telefone (@s.whatsapp.net), não com @lid.
   markAsRead: (instance: string, keys: Pick<WaKey, 'remoteJid' | 'fromMe' | 'id'>[]) =>
     call('POST', path('/chat/markMessageAsRead', instance), { readMessages: keys }),

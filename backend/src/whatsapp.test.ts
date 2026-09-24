@@ -32,21 +32,24 @@ test('parseContent: tipos comuns', () => {
     type: 'text',
     text: 'Oi',
     fileName: null,
+    mimetype: null,
   });
   assert.equal(parseContent({ messageType: 'extendedTextMessage', message: { extendedTextMessage: { text: 'link' } } })?.text, 'link');
-  assert.deepEqual(parseContent({ messageType: 'audioMessage', message: { audioMessage: { ptt: true } } }), {
+  assert.deepEqual(parseContent({ messageType: 'audioMessage', message: { audioMessage: { ptt: true, mimetype: 'audio/ogg; codecs=opus' } } }), {
     type: 'audio',
     text: null,
     fileName: null,
+    mimetype: 'audio/ogg; codecs=opus',
   });
-  assert.deepEqual(parseContent({ messageType: 'imageMessage', message: { imageMessage: { caption: 'foto' } } }), {
+  assert.deepEqual(parseContent({ messageType: 'imageMessage', message: { imageMessage: { caption: 'foto', mimetype: 'image/jpeg' } } }), {
     type: 'image',
     text: 'foto',
     fileName: null,
+    mimetype: 'image/jpeg',
   });
   assert.deepEqual(
     parseContent({ messageType: 'documentMessage', message: { documentMessage: { fileName: 'proposta.pdf' } } }),
-    { type: 'document', text: null, fileName: 'proposta.pdf' },
+    { type: 'document', text: null, fileName: 'proposta.pdf', mimetype: null },
   );
   assert.equal(parseContent({ messageType: 'locationMessage', message: { locationMessage: {} } })?.text, '[Localização]');
 });
@@ -67,11 +70,11 @@ test('parseContent: ignora edições, exclusões, reação removida e mensagens 
 });
 
 test('previewOf', () => {
-  assert.equal(previewOf({ type: 'audio', text: null, fileName: null }), '🎤 Áudio');
-  assert.equal(previewOf({ type: 'image', text: null, fileName: null }), '📷 Imagem');
-  assert.equal(previewOf({ type: 'image', text: 'olha', fileName: null }), '📷 olha');
-  assert.equal(previewOf({ type: 'document', text: null, fileName: 'a.pdf' }), '📄 a.pdf');
-  assert.equal(previewOf({ type: 'text', text: 'x'.repeat(200), fileName: null }).length, 120);
+  assert.equal(previewOf({ type: 'audio', text: null, fileName: null, mimetype: null }), '🎤 Áudio');
+  assert.equal(previewOf({ type: 'image', text: null, fileName: null, mimetype: null }), '📷 Imagem');
+  assert.equal(previewOf({ type: 'image', text: 'olha', fileName: null, mimetype: null }), '📷 olha');
+  assert.equal(previewOf({ type: 'document', text: null, fileName: 'a.pdf', mimetype: null }), '📄 a.pdf');
+  assert.equal(previewOf({ type: 'text', text: 'x'.repeat(200), fileName: null, mimetype: null }).length, 120);
 });
 
 test('isNewerStatus: status nunca volta', () => {

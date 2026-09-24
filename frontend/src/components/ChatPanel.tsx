@@ -100,10 +100,11 @@ export function ChatPanel({ conversationId, instances, onBack }: Props) {
     if (el.scrollTop < 80) void loadOlder();
   };
 
-  const send = async (text: string) => {
+  // Texto, arquivo ou áudio: a mensagem enviada entra no chat; se falhar, mostra o aviso.
+  const send = async (request: () => Promise<ChatMessage>) => {
     setError(null);
     try {
-      const sent = await api.sendText(conversationId, text);
+      const sent = await request();
       stickToBottom.current = true;
       setMessages((prev) => mergeMessages(prev, [sent]));
     } catch (e) {
@@ -172,7 +173,12 @@ export function ChatPanel({ conversationId, instances, onBack }: Props) {
           </button>
         </div>
       )}
-      <Composer onSend={send} />
+      <Composer
+        onSendText={(text) => send(() => api.sendText(conversationId, text))}
+        onSendFile={(file, caption) => send(() => api.sendFile(conversationId, file, caption))}
+        onSendAudio={(audio) => send(() => api.sendAudio(conversationId, audio))}
+        onError={setError}
+      />
     </main>
   );
 }

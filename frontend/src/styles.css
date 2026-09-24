@@ -434,10 +434,98 @@ textarea {
 
 .composer {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 16px;
   background: var(--bg);
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.composer.recording {
+  flex-direction: row;
+  align-items: center;
+}
+
+.icon-button {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: #e3e6ea;
+}
+
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mic-button {
+  background: var(--accent);
+}
+
+.mic-button:hover {
+  background: var(--accent-dark);
+}
+
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.attachment-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-name small {
+  color: var(--muted);
+}
+
+.attachment .icon-button {
+  width: 28px;
+  height: 28px;
+  font-size: 1rem;
+}
+
+.recording-indicator {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .composer textarea {
@@ -450,7 +538,8 @@ textarea {
   line-height: 1.35;
 }
 
-.composer button {
+.send-button {
+  flex: none;
   padding: 10px 18px;
   border: 0;
   border-radius: 8px;
@@ -460,9 +549,72 @@ textarea {
   cursor: pointer;
 }
 
-.composer button:disabled {
+.send-button:disabled {
   background: #9fd9c9;
   cursor: default;
+}
+
+/* Mídias dentro das mensagens */
+.media-image {
+  display: block;
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  border-radius: 6px;
+  cursor: zoom-in;
+}
+
+.media-sticker {
+  display: block;
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+}
+
+.bubble-sticker {
+  background: none !important;
+  box-shadow: none;
+}
+
+.media-audio {
+  display: block;
+  width: 280px;
+  max-width: 100%;
+}
+
+.media-video {
+  display: block;
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  border-radius: 6px;
+}
+
+.media-document {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #0000000d;
+  color: inherit;
+  text-decoration: none;
+}
+
+.media-document-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-document-action {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-dark);
+}
+
+.bubble-text:not(:first-child) {
+  margin-top: 4px;
 }
 
 /* ---------- Botões e formulários comuns ---------- */

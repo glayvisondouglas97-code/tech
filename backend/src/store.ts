@@ -90,6 +90,7 @@ export async function saveMessage(instanceName: string, msg: WaMessage, options:
         type: content.type,
         text: content.text,
         fileName: content.fileName,
+        mediaMime: content.mimetype,
         status: msg.status ?? null,
         sentAt,
       },

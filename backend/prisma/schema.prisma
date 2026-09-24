@@ -66,6 +66,8 @@ model Message {
   type           String // text | image | video | audio | document | sticker | reaction | other
   text           String? // texto ou legenda
   fileName       String? // nome do documento
+  mediaMime      String? // tipo do arquivo de mídia (ex.: audio/ogg)
+  mediaPath      String? // arquivo salvo no volume de mídias (relativo à pasta de mídias); null = ainda não baixado
   status         String? // PENDING | SERVER_ACK | DELIVERY_ACK | READ | PLAYED | ERROR
   sentAt         DateTime
   createdAt      DateTime @default(now())
