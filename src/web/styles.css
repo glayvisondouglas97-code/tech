@@ -5081,3 +5081,120 @@ dialog.dlg:has(.wa-qr-layout) {
   gap: 8px;
   margin-left: auto;
 }
+
+/* ---------- Seleção para excluir (conversas e mensagens) ---------- */
+.wa-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wa-search-row .search {
+  flex: 1;
+  min-width: 0;
+}
+.wa-select-btn {
+  flex: none;
+}
+.wa-select-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--r-md);
+  background: var(--bad-soft);
+}
+.wa-select-all {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wa-select-all input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+/* Bolinha de marcar (lista e chat) */
+.wa-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+  color: #fff;
+}
+.wa-row.checked .wa-check,
+.wa-sel-row.on .wa-check {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+.wa-row.checked {
+  background: var(--surface-2);
+}
+.wa-row:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.wa-row .wa-check {
+  align-self: center;
+}
+/* Mensagens no modo de seleção: a linha inteira marca/desmarca */
+.wa-sel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -8px;
+  padding: 1px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.wa-sel-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+.wa-sel-row.on {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.wa-sel-msg {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wa-select-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.wa-select-actions .grow {
+  min-width: 90px;
+}
+@media (max-width: 640px) {
+  /* Celular: contador numa linha, os dois botões dividindo a linha de baixo. */
+  .wa-select-actions .grow {
+    flex: 1 1 60%;
+  }
+  .wa-select-actions .btn {
+    flex: 1 1 40%;
+    justify-content: center;
+  }
+}
+.wa-chat-head .menu-wrap,
+.wa-chat-head > .icon-btn:last-child {
+  flex: none;
+}

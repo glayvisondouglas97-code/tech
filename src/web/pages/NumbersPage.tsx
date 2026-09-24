@@ -2,9 +2,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type CSSProperties, useState } from 'react';
 import type { TeamMember } from '../../shared/api';
 import type { InstanceInfo } from '../../shared/conversations';
-import { IconPencil, IconPlus, IconQr, IconSmartphone, IconX } from '../components/Icons';
+import {
+  IconDots,
+  IconPencil,
+  IconPlus,
+  IconQr,
+  IconSmartphone,
+  IconTrash,
+  IconX,
+} from '../components/Icons';
 import { useToast } from '../components/Toasts';
-import { Dialog, Empty } from '../components/ui';
+import { Dialog, Empty, Menu } from '../components/ui';
 import { QrDialog } from '../components/wa/QrDialog';
 import { api, errorMessage } from '../lib/api';
 import { plural } from '../lib/format';
@@ -16,6 +24,7 @@ import {
   statusInfo,
   useWaInstances,
   WA_INSTANCES,
+  WA_STATS,
   wa,
 } from '../lib/whatsapp';
 
@@ -143,6 +152,7 @@ function NumberCard({
   const [editing, setEditing] = useState(false);
   const [nickname, setNickname] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const status = statusInfo(instance.status);
   const manageAll = can('manageNumbers');
   const canManage = manageAll || instance.owner?.id === me?.id;
@@ -208,7 +218,15 @@ function NumberCard({
           </span>
           <span className="sub small">Identificação: {instance.name}</span>
         </div>
+        {canManage && (
+          <Menu label={`Mais opções do número ${instanceLabel(instance)}`} icon={<IconDots />}>
+            <button type="button" role="menuitem" className="danger" onClick={() => setDeleting(true)}>
+              <IconTrash /> Excluir número
+            </button>
+          </Menu>
+        )}
       </div>
+      {deleting && <DeleteNumberDialog instance={instance} onClose={() => setDeleting(false)} />}
 
       {manageAll ? (
         <label className="wa-num-owner">
@@ -341,6 +359,67 @@ function AddNumberDialog({
           </button>
         </div>
       </form>
+    </Dialog>
+  );
+}
+
+/**
+ * Excluir o número: desconecta do celular (sai de "Dispositivos conectados"), tira da Evolution e apaga do
+ * sistema as conversas e mensagens dele. Para confirmar, a pessoa digita EXCLUIR.
+ */
+function DeleteNumberDialog({ instance, onClose }: { instance: InstanceInfo; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const label = instanceLabel(instance);
+  return (
+    <Dialog open onClose={onClose} title="Excluir número">
+      <p>
+        O número <b>{label}</b>
+        {instance.phone ? ` (${formatPhone(instance.phone)})` : ''} sai do sistema: é desconectado (some de
+        "Dispositivos conectados" no celular) e{' '}
+        <b>todas as conversas e mensagens dele são apagadas do sistema</b>, com os áudios, fotos e documentos.
+        O WhatsApp do celular continua funcionando normalmente. Não dá para desfazer.
+      </p>
+      <label className="field">
+        Para confirmar, digite EXCLUIR
+        <input
+          className="input"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="off"
+        />
+      </label>
+      <div className="row end">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={busy || confirm.trim().toLowerCase() !== 'excluir'}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const r = await wa.deleteInstance(instance.id, confirm);
+              qc.setQueryData<InstanceInfo[]>(WA_INSTANCES, (prev) =>
+                prev?.filter((i) => i.id !== instance.id),
+              );
+              void qc.invalidateQueries({ queryKey: WA_STATS });
+              toast(
+                `${label} excluído (${plural(r.conversations, 'conversa apagada', 'conversas apagadas')}).`,
+              );
+              onClose();
+            } catch (err) {
+              toast(errorMessage(err), { tone: 'bad' });
+              setBusy(false);
+            }
+          }}
+        >
+          Excluir número
+        </button>
+      </div>
     </Dialog>
   );
 }

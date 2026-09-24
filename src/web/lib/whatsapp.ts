@@ -44,6 +44,17 @@ export const wa = {
     api<InstanceInfo>(`/instances/${id}`, { method: 'PATCH', body: { nickname } }),
   setInstanceOwner: (id: number, ownerId: string | null) =>
     api<InstanceInfo>(`/instances/${id}`, { method: 'PATCH', body: { ownerId } }),
+  deleteInstance: (id: number, confirm: string) =>
+    api<{ conversations: number; messages: number }>(`/instances/${id}/delete`, { body: { confirm } }),
+  deleteConversations: (ids: number[]) =>
+    api<{ deleted: number; messages: number }>('/conversations/delete', { body: { ids } }),
+  deleteMessages: (conversationId: number, ids: number[], forEveryone: boolean) =>
+    api<{ deleted: number; failed: number; ids: number[] }>(
+      `/conversations/${conversationId}/messages/delete`,
+      {
+        body: { ids, forEveryone },
+      },
+    ),
   connectInstance: (id: number) =>
     api<{ status: 'open' | 'connecting'; qrcode: string | null }>(`/instances/${id}/connect`, { body: {} }),
 
@@ -217,4 +228,11 @@ export function useWaCacheSync(enabled: boolean) {
     void qc.invalidateQueries({ queryKey: WA_INSTANCES });
     void qc.invalidateQueries({ queryKey: WA_STATS });
   });
+}
+
+/** O WhatsApp só deixa apagar para todos as mensagens enviadas pelo número há menos de 2 dias. */
+export const FOR_EVERYONE_LIMIT_MS = 48 * 60 * 60 * 1000;
+
+export function canDeleteForEveryone(message: ChatMessage): boolean {
+  return message.fromMe && Date.now() - Date.parse(message.sentAt) < FOR_EVERYONE_LIMIT_MS;
 }

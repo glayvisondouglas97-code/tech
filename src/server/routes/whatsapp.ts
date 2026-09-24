@@ -16,6 +16,7 @@ import {
   manageableNumber,
   visibleNumbers,
 } from '../modules/whatsapp/access';
+import { deleteConversations, deleteMessages, deleteNumber } from '../modules/whatsapp/deletion';
 import {
   conversationDto,
   conversationsQuery,
@@ -188,6 +189,13 @@ export async function whatsappRoutes(app: FastifyInstance) {
     return { status: 'connecting', qrcode: result.base64 ?? null };
   });
 
+  // Exclui o número: desconecta do celular, tira da Evolution e apaga as conversas dele do sistema.
+  app.post('/instances/:id/delete', async (req) => {
+    const user = requireUser(req);
+    const { confirm } = parse(z.object({ confirm: z.string().max(40) }), req.body ?? {});
+    return deleteNumber(db, user, parseId((req.params as { id: string }).id), confirm, req.ip);
+  });
+
   // Reimporta o histórico recente de um número (ferramenta de manutenção).
   app.post('/instances/:id/import-history', async (req) => {
     const user = requireUser(req);
@@ -321,6 +329,24 @@ export async function whatsappRoutes(app: FastifyInstance) {
     }
     const rows = await query.orderBy('sent_at', 'desc').orderBy('id', 'desc').limit(q.limit).execute();
     return rows.reverse().map(messageDto);
+  });
+
+  // Exclui conversas do sistema (com as mensagens). No celular elas continuam.
+  app.post('/conversations/delete', async (req) => {
+    const user = requireUser(req);
+    const { ids } = parse(z.object({ ids: z.array(idSchema).min(1).max(200) }), req.body ?? {});
+    return deleteConversations(db, user, ids, req.ip);
+  });
+
+  // Apaga mensagens: só do sistema ("para mim") ou também do WhatsApp do contato ("para todos").
+  app.post('/conversations/:id/messages/delete', async (req) => {
+    const user = requireUser(req);
+    const id = parseId((req.params as { id: string }).id);
+    const { ids, forEveryone } = parse(
+      z.object({ ids: z.array(idSchema).min(1).max(200), forEveryone: z.boolean().default(false) }),
+      req.body ?? {},
+    );
+    return deleteMessages(db, user, id, ids, forEveryone, req.ip);
   });
 
   // Zera o contador de não lidas no sistema (não manda tique azul para o contato).

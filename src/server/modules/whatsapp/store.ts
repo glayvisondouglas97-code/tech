@@ -114,6 +114,14 @@ export async function saveMessage(
         : null;
       return { saved: null, statusUpdated };
     }
+    // Mensagem que alguém apagou pelo sistema: não volta (importação de histórico ou webhook repetido).
+    const deleted = await tx
+      .selectFrom('wa_deleted_messages')
+      .select('wa_id')
+      .where('instance_id', '=', instance.id)
+      .where('wa_id', '=', waId)
+      .executeTakeFirst();
+    if (deleted) return { saved: null, statusUpdated: null };
 
     let conversation: WaConversation;
     if (options.conversationId) {

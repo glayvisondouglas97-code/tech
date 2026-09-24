@@ -209,6 +209,13 @@ export interface WaConversationsTable {
   created_at: Generated<Date>;
 }
 
+/** Mensagem apagada pelo sistema: a importação de histórico e os webhooks repetidos não a trazem de volta. */
+export interface WaDeletedMessagesTable {
+  instance_id: number;
+  wa_id: string;
+  deleted_at: Generated<Date>;
+}
+
 export interface WaMessagesTable {
   id: Generated<number>;
   instance_id: number;
@@ -248,6 +255,7 @@ export interface Database {
   wa_contacts: WaContactsTable;
   wa_conversations: WaConversationsTable;
   wa_messages: WaMessagesTable;
+  wa_deleted_messages: WaDeletedMessagesTable;
 }
 
 export type User = Selectable<UsersTable>;

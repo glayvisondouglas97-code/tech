@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { ConversationItem, ConversationRemovedEvent, ConversationTab } from '../../shared/conversations';
 import { IconConversas } from '../components/Icons';
-import { Empty } from '../components/ui';
+import { useToast } from '../components/Toasts';
+import { Confirm, Empty } from '../components/ui';
 import { ChatPanel } from '../components/wa/ChatPanel';
 import { ConversationList, type ConversationsState } from '../components/wa/ConversationList';
+import { errorMessage } from '../lib/api';
+import { plural } from '../lib/format';
 import { useDebounced } from '../lib/hooks';
 import { useReconnect, useSocketEvent } from '../lib/socket';
 import { compareConversations, PAGE_SIZE, useWaInstances, wa } from '../lib/whatsapp';
@@ -27,6 +30,41 @@ export function ConversationsPage() {
   const query = search.trim() ? debounced : ''; // apagar a busca vale na hora
   const conversations = useConversations(tab, instanceId, query);
   const instances = useWaInstances().data ?? [];
+  const toast = useToast();
+
+  // Seleção de conversas para excluir de uma vez.
+  const [selecting, setSelecting] = useState(false);
+  const [checked, setChecked] = useState<Set<number>>(() => new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const stopSelecting = useCallback(() => {
+    setSelecting(false);
+    setChecked(new Set());
+  }, []);
+  const toggleChecked = useCallback((id: number) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const deleteChecked = async () => {
+    setDeleting(true);
+    try {
+      const ids = [...checked];
+      const r = await wa.deleteConversations(ids);
+      conversations.remove(ids);
+      toast(`${plural(r.deleted, 'conversa excluída', 'conversas excluídas')}.`);
+      if (selectedId && ids.includes(selectedId)) navigate('/conversas', { replace: true });
+      stopSelecting();
+    } catch (e) {
+      toast(errorMessage(e), { tone: 'bad' });
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
 
   // Abrir conversa: a partir da lista cria um passo no histórico (o "voltar" fecha o chat);
   // trocar de uma conversa para outra substitui o passo.
@@ -39,6 +77,16 @@ export function ConversationsPage() {
     if (navState?.fromList || navState?.fromLead) navigate(-1);
     else navigate('/conversas', { replace: true });
   }, [navigate, navState]);
+
+  // Conversa excluída (aqui ou por outra pessoa): sai da lista e, se estiver aberta, fecha.
+  useSocketEvent<{ id: number }>('conversation:deleted', ({ id }) => {
+    setChecked((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  });
 
   // Se a conversa aberta foi juntada a outra (mesmo lead por telefone e @lid), abre a que ficou.
   useSocketEvent<ConversationRemovedEvent>('conversation:removed', ({ id, mergedInto }) => {
@@ -65,6 +113,15 @@ export function ConversationsPage() {
         conversations={conversations}
         selectedId={selectedId}
         onSelect={openConversation}
+        selection={{
+          active: selecting,
+          checked,
+          onStart: () => setSelecting(true),
+          onToggle: toggleChecked,
+          onSetAll: setChecked,
+          onCancel: stopSelecting,
+          onDelete: () => setConfirmDelete(true),
+        }}
       />
       {selectedId ? (
         <ChatPanel
@@ -73,6 +130,10 @@ export function ConversationsPage() {
           preview={conversations.items.find((c) => c.id === selectedId)}
           instances={instances}
           onBack={closeConversation}
+          onDeleted={() => {
+            conversations.remove([selectedId]);
+            navigate('/conversas', { replace: true });
+          }}
         />
       ) : (
         <section className="wa-chat wa-chat-empty">
@@ -83,6 +144,20 @@ export function ConversationsPage() {
           </div>
         </section>
       )}
+      <Confirm
+        open={confirmDelete}
+        title={`Excluir ${plural(checked.size, 'conversa', 'conversas')}?`}
+        confirmLabel="Excluir"
+        danger
+        busy={deleting}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => void deleteChecked()}
+      >
+        <p>
+          As conversas e as mensagens somem do sistema, com os áudios, fotos e documentos. No WhatsApp do
+          celular continuam. Se o contato escrever de novo, a conversa volta só com as mensagens novas.
+        </p>
+      </Confirm>
     </div>
   );
 }
@@ -152,6 +227,13 @@ function useConversations(tab: ConversationTab, instanceId: number | null, q: st
   useSocketEvent<ConversationRemovedEvent>('conversation:removed', ({ id }) =>
     setItems((prev) => prev.filter((c) => c.id !== id)),
   );
+  useSocketEvent<{ id: number }>('conversation:deleted', ({ id }) =>
+    setItems((prev) => prev.filter((c) => c.id !== id)),
+  );
+  const remove = useCallback(
+    (ids: number[]) => setItems((prev) => prev.filter((c) => !ids.includes(c.id))),
+    [],
+  );
 
   const loadMore = useCallback(async () => {
     const last = itemsRef.current.at(-1);
@@ -170,5 +252,5 @@ function useConversations(tab: ConversationTab, instanceId: number | null, q: st
     }
   }, [params]);
 
-  return { items, loading, hasMore, loadMore };
+  return { items, loading, hasMore, loadMore, remove };
 }

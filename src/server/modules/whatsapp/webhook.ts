@@ -4,6 +4,7 @@ import type { Kysely } from 'kysely';
 import type { Database } from '../../db/schema';
 import { markRepliedFromChat } from '../leads/service';
 import { scheduleHistoryImport } from './history';
+import { isRecentlyDeleted } from './instances';
 import { isMediaMessage, scheduleMediaDownload } from './media';
 import type { WaMessage as RawMessage } from './parse';
 import { enqueue } from './queue';
@@ -25,6 +26,7 @@ export async function handleEvolutionEvent(
   instanceName: string,
   data: EventData,
 ): Promise<void> {
+  if (isRecentlyDeleted(instanceName)) return; // aviso atrasado de um número que acabou de ser excluído
   switch (event) {
     case 'messages.upsert': // recebida, ou enviada pelo celular
     case 'send.message': // enviada pelo sistema

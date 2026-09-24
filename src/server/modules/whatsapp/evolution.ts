@@ -206,6 +206,14 @@ export const evolution = {
       { numbers },
     ),
 
+  // Apaga para todos uma mensagem enviada pelo número (o WhatsApp só aceita nos primeiros ~2 dias).
+  // A Evolution também tira a mensagem do banco dela.
+  deleteForEveryone: (instance: string, key: { id: string; remoteJid: string }) =>
+    call('DELETE', path('/chat/deleteMessageForEveryone', instance), { ...key, fromMe: true }),
+
+  // Remove o número da Evolution (se estiver conectado, desconecta do celular antes).
+  deleteInstance: (instance: string) => call('DELETE', path('/instance/delete', instance)),
+
   // A Evolution só aceita chaves com o telefone (@s.whatsapp.net), não com @lid.
   markAsRead: (instance: string, keys: Pick<WaKey, 'remoteJid' | 'fromMe' | 'id'>[]) =>
     call('POST', path('/chat/markMessageAsRead', instance), { readMessages: keys }),

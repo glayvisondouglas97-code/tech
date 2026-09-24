@@ -197,3 +197,32 @@ export async function publishQrCode(instanceId: number, qrcode: string | null): 
     io.to(audience(await ownerOf(instanceId), MANAGERS)).emit('instance:qrcode', { instanceId, qrcode });
   });
 }
+
+/** Mensagens apagadas: a conversa aberta tira as mensagens da tela. */
+export async function publishMessagesDeleted(
+  instanceId: number,
+  ownerId: string | null,
+  conversationId: number,
+  ids: number[],
+): Promise<void> {
+  owners.set(instanceId, ownerId);
+  io?.to(audience(ownerId)).emit('message:deleted', { conversationId, ids });
+}
+
+/** Conversa excluída: sai da lista e, se estiver aberta, fecha. */
+export async function publishConversationDeleted(
+  conversationId: number,
+  instanceId: number,
+  ownerId: string | null,
+): Promise<void> {
+  owners.set(instanceId, ownerId);
+  io?.to(audience(ownerId)).emit('conversation:deleted', { id: conversationId });
+}
+
+/** Número excluído: some da tela de números e as conversas dele saem da lista. */
+export async function publishInstanceDeleted(instanceId: number, ownerId: string | null): Promise<void> {
+  owners.delete(instanceId);
+  const rooms = audience(ownerId);
+  io?.to(rooms).emit('instance:removed', { id: instanceId });
+  io?.to(rooms).emit('conversations:reload');
+}

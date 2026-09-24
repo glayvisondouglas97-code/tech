@@ -6,6 +6,10 @@ export interface FakeEvolution {
   calls: { method: string; url: string; apikey: string | undefined; body: unknown }[];
   /** Números (instâncias) que respondem como desconectados. */
   closed: Set<string>;
+  /** Números que a Evolution já não tem (excluir responde 404). */
+  missing: Set<string>;
+  /** Números que a Evolution se recusa a excluir (responde 500). */
+  undeletable: Set<string>;
   close: () => Promise<void>;
 }
 
@@ -22,6 +26,8 @@ function checkNumber(number: string) {
 export async function startFakeEvolution(): Promise<FakeEvolution> {
   const calls: FakeEvolution['calls'] = [];
   const closed = new Set<string>();
+  const missing = new Set<string>();
+  const undeletable = new Set<string>();
   let n = 0;
   const sent = (number: string, message: Record<string, unknown>, messageType: string) => ({
     key: {
@@ -49,6 +55,20 @@ export async function startFakeEvolution(): Promise<FakeEvolution> {
     if (url.startsWith('/instance/connectionState/')) {
       const name = decodeURIComponent(url.split('/').pop() ?? '');
       return json(200, { instance: { state: closed.has(name) ? 'close' : 'open' } });
+    }
+    if (url.startsWith('/chat/deleteMessageForEveryone/'))
+      return json(201, { key: body, message: { protocolMessage: { key: { id: body.id }, type: 'REVOKE' } } });
+    if (url.startsWith('/instance/delete/')) {
+      const name = decodeURIComponent(url.split('/').pop() ?? '');
+      if (undeletable.has(name))
+        return json(500, { status: 500, error: 'Internal Server Error', response: { message: ['falhou'] } });
+      if (missing.has(name))
+        return json(404, {
+          status: 404,
+          error: 'Not Found',
+          response: { message: [`The "${name}" instance does not exist`] },
+        });
+      return json(200, { status: 'SUCCESS', error: false, response: { message: 'Instance deleted' } });
     }
     if (url.startsWith('/chat/whatsappNumbers/'))
       return json(
@@ -83,6 +103,8 @@ export async function startFakeEvolution(): Promise<FakeEvolution> {
     url: `http://127.0.0.1:${port}`,
     calls,
     closed,
+    missing,
+    undeletable,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

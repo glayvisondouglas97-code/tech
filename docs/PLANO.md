@@ -264,6 +264,16 @@ por número em `src/server/modules/whatsapp/realtime.ts`.
 - **Celular:** a barra de atalhos de baixo fica sempre fixa. A página não rola; só a área do conteúdo rola por dentro, então
   o navegador não esconde a barra de endereço no meio da rolagem. A barra some só dentro de uma conversa do WhatsApp.
 
+## 4.10 Excluir mensagens, conversas e números
+
+- **Mensagens:** no chat, **⋯ → Selecionar mensagens** → **Apagar para mim** (só do sistema) ou **Apagar para todos**
+  (também do WhatsApp do contato; só enviadas pelo número nas últimas 48 horas).
+- **Conversas:** seleção na lista (marcar várias ou todas) ou **⋯ → Excluir conversa** no chat. Somem do sistema; no
+  celular continuam.
+- **Números:** **⋯ → Excluir número** no cartão, confirmando com EXCLUIR: desconecta, tira da Evolution e apaga as
+  conversas dele.
+- Quem pode: o responsável pelo número e o dono/administrador. O que foi apagado não volta com a reimportação de histórico.
+
 ## 5. Decisões tomadas
 
 1. **Histórico ao conectar um número**: importar o histórico recente que o WhatsApp envia ao conectar, só de

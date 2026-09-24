@@ -137,6 +137,10 @@ desligado. O histórico dos últimos 14 dias é importado sozinho logo depois da
 números, clique em **Reconectar** no cartão dele: se a sessão ainda valer, ele volta sozinho; se não, aparece um QR Code
 novo. O apelido se troca no lápis ao lado do nome.
 
+**Excluir número:** no cartão do número, **⋯** → **Excluir número** e digite **EXCLUIR**. O número é desconectado (sai de
+"Dispositivos conectados" no celular), sai da Evolution e todas as conversas e mensagens dele são apagadas do sistema. O
+WhatsApp do celular continua funcionando. Quem pode: o responsável pelo número e o dono/administrador.
+
 > O painel da Evolution (<http://localhost:8080/manager>) continua disponível para emergências, mas não é necessário.
 > Não altere nele as opções de webhook dos números.
 
@@ -200,6 +204,16 @@ Uma conversa aberta pelo **Chamar** só aparece na lista de conversas depois da 
   JPG, PNG e WebP vão como imagem; qualquer outro arquivo (PDF, planilha etc.) vai como documento.
 - **Mídias recebidas:** áudios têm player com velocidade (1×, 1,5×, 2×); imagens abrem em tela cheia e documentos têm o
   botão de baixar. Os arquivos ficam no volume `midias` do Docker (não no banco).
+- **Apagar mensagens:** no chat, menu **⋯** → **Selecionar mensagens**, toque nas mensagens e escolha **Apagar para mim**
+  (somem do sistema; o contato continua vendo) ou **Apagar para todos** (somem também do WhatsApp do contato; só
+  mensagens enviadas pelo número nas últimas 48 horas, como no WhatsApp). **Esc** cancela.
+- **Excluir conversas:** na lista, o botão de marcar (ao lado da busca) liga a seleção; marque as conversas (ou
+  **Selecionar todas**) e clique em **Excluir**. No chat aberto: menu **⋯** → **Excluir conversa**. Somem do sistema com
+  as mensagens e os arquivos; no celular continuam. Se o contato escrever de novo, a conversa volta só com as mensagens
+  novas.
+- **Quem apaga:** o responsável pelo número e o dono/administrador. O supervisor vê, mas não apaga nas conversas dos
+  outros. Tudo fica na Auditoria. O que foi apagado não volta nem quando o número reconecta e o histórico é
+  reimportado.
 
 ### No celular
 
@@ -285,6 +299,9 @@ equipe e relatórios estão em `src/server/routes`.
 | `POST /api/conversations/ID/audio` | Envia áudio gravado (corpo = arquivo de áudio) como mensagem de voz |
 | `POST /api/conversations/ID/media?fileName=...&caption=...` | Envia imagem ou documento (corpo = arquivo) |
 | `GET /api/messages/ID/media` | Abre/baixa a mídia de uma mensagem |
+| `POST /api/conversations/ID/messages/delete` | Apaga mensagens (`{"ids": [..], "forEveryone": false}`; `true` = para todos) |
+| `POST /api/conversations/delete` | Exclui conversas do sistema (`{"ids": [..]}`) |
+| `POST /api/instances/ID/delete` | Exclui o número (`{"confirm": "EXCLUIR"}`): desconecta, tira da Evolution e apaga as conversas |
 | `POST /webhook/evolution` | Eventos da Evolution (só pela rede interna do Docker, com o token secreto) |
 
 ## Para quem mantém o código

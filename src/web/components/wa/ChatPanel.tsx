@@ -15,8 +15,11 @@ import type {
   MessageEvent,
 } from '../../../shared/conversations';
 import { errorMessage } from '../../lib/api';
+import { plural } from '../../lib/format';
 import { useRealtimeOnline, useReconnect, useSocketEvent } from '../../lib/socket';
+import { useCanManageNumber } from '../../lib/wa-access';
 import {
+  canDeleteForEveryone,
   conversationTitle,
   dayLabel,
   formatPhone,
@@ -31,12 +34,17 @@ import {
   IconArrowDown,
   IconBack,
   IconChat,
+  IconCheck,
+  IconChecks,
+  IconDots,
   IconMic,
+  IconTrash,
   IconWarning,
   IconWifiOff,
   IconX,
 } from '../Icons';
-import { Empty } from '../ui';
+import { useToast } from '../Toasts';
+import { Confirm, Empty, Menu } from '../ui';
 import { Composer } from './Composer';
 import { ContactAvatar } from './ContactAvatar';
 import { LeadStrip } from './LeadStrip';
@@ -48,6 +56,8 @@ type Props = {
   preview?: ConversationItem;
   instances: InstanceInfo[];
   onBack: () => void;
+  /** A conversa foi excluída (por esta pessoa ou por outra): a tela volta para a lista. */
+  onDeleted: () => void;
 };
 
 /** Mensagens seguidas do mesmo lado, com menos de 5 minutos entre elas, ficam agrupadas. */
@@ -77,7 +87,7 @@ function groupByDay(messages: ChatMessage[]): DayGroup[] {
   return days;
 }
 
-export function ChatPanel({ conversationId, preview, instances, onBack }: Props) {
+export function ChatPanel({ conversationId, preview, instances, onBack, onDeleted }: Props) {
   const [conversation, setConversation] = useState<ConversationItem | null>(preview ?? null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -97,6 +107,88 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
   const qc = useQueryClient();
+  const toast = useToast();
+  const canManageNumber = useCanManageNumber();
+  // Seleção de mensagens para apagar (para mim ou para todos) e exclusão da conversa.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
+  const [confirming, setConfirming] = useState<null | 'mim' | 'todos' | 'conversa'>(null);
+  const [deleting, setDeleting] = useState(false);
+  const stopSelecting = useCallback(() => {
+    setSelecting(false);
+    setPicked(new Set());
+  }, []);
+  const togglePicked = useCallback((id: number) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    if (!selecting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.querySelector('dialog[open]')) stopSelecting();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selecting, stopSelecting]);
+
+  // Apagadas por outra pessoa (ou em outra aba): saem da tela na hora.
+  useSocketEvent<{ conversationId: number; ids: number[] }>(
+    'message:deleted',
+    ({ conversationId: id, ids }) => {
+      if (id !== conversationId) return;
+      const gone = new Set(ids);
+      setMessages((prev) => prev.filter((m) => !gone.has(m.id)));
+      setPicked((prev) => new Set([...prev].filter((x) => !gone.has(x))));
+    },
+  );
+  useSocketEvent<{ id: number }>('conversation:deleted', ({ id }) => {
+    if (id === conversationId) onDeleted();
+  });
+
+  const removeMessages = async (forEveryone: boolean) => {
+    setDeleting(true);
+    try {
+      const r = await wa.deleteMessages(conversationId, [...picked], forEveryone);
+      const gone = new Set(r.ids);
+      setMessages((prev) => prev.filter((m) => !gone.has(m.id)));
+      toast(
+        forEveryone
+          ? `${plural(r.deleted, 'mensagem apagada', 'mensagens apagadas')} para todos.`
+          : `${plural(r.deleted, 'mensagem apagada', 'mensagens apagadas')} do sistema.`,
+      );
+      if (r.failed) {
+        toast(
+          `${plural(r.failed, 'mensagem não pôde', 'mensagens não puderam')} ser apagada(s) para todos.`,
+          {
+            tone: 'warn',
+          },
+        );
+      }
+      stopSelecting();
+    } catch (e) {
+      toast(errorMessage(e), { tone: 'bad' });
+    } finally {
+      setDeleting(false);
+      setConfirming(null);
+    }
+  };
+
+  const removeConversation = async () => {
+    setDeleting(true);
+    try {
+      await wa.deleteConversations([conversationId]);
+      toast('Conversa excluída.');
+      onDeleted();
+    } catch (e) {
+      toast(errorMessage(e), { tone: 'bad' });
+      setDeleting(false);
+      setConfirming(null);
+    }
+  };
 
   // O resultado do lead muda sozinho quando a primeira mensagem sai e quando ele responde:
   // atualiza a faixa do lead e as telas do Chamador.
@@ -253,6 +345,9 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
   const instance = instances.find((i) => i.id === conversation.instance.id) ?? conversation.instance;
   const label = instanceLabel(instance);
   const name = conversationTitle(conversation);
+  const canDelete = canManageNumber(instances.find((i) => i.id === conversation.instance.id));
+  const pickedMessages = messages.filter((m) => picked.has(m.id));
+  const forEveryoneOk = pickedMessages.length > 0 && pickedMessages.every(canDeleteForEveryone);
 
   return (
     <section className="wa-chat" aria-label={`Conversa com ${name}`}>
@@ -275,6 +370,29 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
           <i aria-hidden="true" />
           <span>via {label}</span>
         </span>
+        {canDelete && (
+          <Menu label="Mais opções da conversa" icon={<IconDots />}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setSelecting(true);
+                setPicked(new Set());
+              }}
+            >
+              <IconChecks /> Selecionar mensagens
+            </button>
+            <hr />
+            <button
+              type="button"
+              role="menuitem"
+              className="danger"
+              onClick={() => setConfirming('conversa')}
+            >
+              <IconTrash /> Excluir conversa
+            </button>
+          </Menu>
+        )}
       </header>
 
       {conversation.lead && <LeadStrip leadId={conversation.lead.id} label={conversation.lead.label} />}
@@ -324,9 +442,19 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
             {groups.map((group) => (
               <section key={group.day} className="wa-day">
                 <div className="wa-day-label">{group.day}</div>
-                {group.items.map(({ message, groupStart }) => (
-                  <MessageBubble key={message.id} message={message} groupStart={groupStart} />
-                ))}
+                {group.items.map(({ message, groupStart }) =>
+                  selecting ? (
+                    <SelectableMessage
+                      key={message.id}
+                      message={message}
+                      groupStart={groupStart}
+                      checked={picked.has(message.id)}
+                      onToggle={togglePicked}
+                    />
+                  ) : (
+                    <MessageBubble key={message.id} message={message} groupStart={groupStart} />
+                  ),
+                )}
               </section>
             ))}
           </div>
@@ -356,12 +484,121 @@ export function ChatPanel({ conversationId, preview, instances, onBack }: Props)
           </button>
         </div>
       )}
-      <Composer
-        onSendText={(text) => send(() => wa.sendText(conversationId, text))}
-        onSendFile={(file, caption) => send(() => wa.sendFile(conversationId, file, caption))}
-        onSendAudio={(audio) => send(() => wa.sendAudio(conversationId, audio))}
-        onError={setError}
-      />
+      {selecting ? (
+        <div className="wa-select-actions" role="toolbar" aria-label="Mensagens selecionadas">
+          <button type="button" className="icon-btn" onClick={stopSelecting} aria-label="Cancelar seleção">
+            <IconX />
+          </button>
+          <b className="grow">
+            {picked.size ? plural(picked.size, 'selecionada', 'selecionadas') : 'Toque nas mensagens'}
+          </b>
+          <button
+            type="button"
+            className="btn btn-line btn-sm"
+            disabled={!picked.size}
+            onClick={() => setConfirming('mim')}
+          >
+            Apagar para mim
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={!forEveryoneOk}
+            title={
+              forEveryoneOk ? undefined : 'Para todos, só mensagens enviadas pelo número nas últimas 48 horas'
+            }
+            onClick={() => setConfirming('todos')}
+          >
+            Apagar para todos
+          </button>
+        </div>
+      ) : (
+        <Composer
+          onSendText={(text) => send(() => wa.sendText(conversationId, text))}
+          onSendFile={(file, caption) => send(() => wa.sendFile(conversationId, file, caption))}
+          onSendAudio={(audio) => send(() => wa.sendAudio(conversationId, audio))}
+          onError={setError}
+        />
+      )}
+
+      <Confirm
+        open={confirming === 'mim'}
+        title={`Apagar ${plural(picked.size, 'mensagem', 'mensagens')} para você?`}
+        confirmLabel="Apagar para mim"
+        danger
+        busy={deleting}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => void removeMessages(false)}
+      >
+        <p>
+          Somem do sistema para toda a equipe, com os áudios, fotos e documentos. O contato continua vendo no
+          WhatsApp dele.
+        </p>
+      </Confirm>
+      <Confirm
+        open={confirming === 'todos'}
+        title={`Apagar ${plural(picked.size, 'mensagem', 'mensagens')} para todos?`}
+        confirmLabel="Apagar para todos"
+        danger
+        busy={deleting}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => void removeMessages(true)}
+      >
+        <p>
+          Somem do WhatsApp do contato (lá aparece "Mensagem apagada") e do sistema. Não dá para desfazer.
+        </p>
+      </Confirm>
+      <Confirm
+        open={confirming === 'conversa'}
+        title="Excluir esta conversa?"
+        confirmLabel="Excluir conversa"
+        danger
+        busy={deleting}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => void removeConversation()}
+      >
+        <p>
+          A conversa e as mensagens somem do sistema, com os áudios, fotos e documentos. No WhatsApp do
+          celular continuam. Se o contato escrever de novo, a conversa volta só com as mensagens novas.
+        </p>
+      </Confirm>
     </section>
+  );
+}
+
+/** Mensagem no modo de seleção: toque para marcar (o conteúdo não reage ao clique). */
+function SelectableMessage({
+  message,
+  groupStart,
+  checked,
+  onToggle,
+}: {
+  message: ChatMessage;
+  groupStart: boolean;
+  checked: boolean;
+  onToggle: (id: number) => void;
+}) {
+  return (
+    <div
+      className={`wa-sel-row${checked ? ' on' : ''}`}
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={`${message.fromMe ? 'Enviada' : 'Recebida'} às ${new Date(message.sentAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${message.text ? `: ${message.text.slice(0, 60)}` : ''}`}
+      tabIndex={0}
+      onClick={() => onToggle(message.id)}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          onToggle(message.id);
+        }
+      }}
+    >
+      <span className="wa-check" aria-hidden="true">
+        {checked && <IconCheck size={13} />}
+      </span>
+      <div className="wa-sel-msg" inert>
+        <MessageBubble message={message} groupStart={groupStart} />
+      </div>
+    </div>
   );
 }
