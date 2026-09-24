@@ -13,3 +13,7 @@ Thumbs.db
 
 # Cliente do Prisma (gerado por "npx prisma generate")
 backend/src/generated/
+
+# Frontend compilado
+frontend/dist/
+backend/public/

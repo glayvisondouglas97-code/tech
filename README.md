@@ -12,7 +12,7 @@ O plano completo e as decisões estão em [`docs/PLANO.md`](docs/PLANO.md).
 | `evolution` | Conecta os números de WhatsApp (1 instância por número) |
 | `postgres` | Banco `evolution` (usado pela Evolution) e banco `central` (usado pelo nosso sistema) |
 | `redis` | Cache da Evolution |
-| `app` | Nosso backend: recebe os webhooks, grava contatos, conversas e mensagens, envia respostas |
+| `app` | Nosso sistema: o site (tela de conversas) e o backend, que recebe os webhooks, grava as conversas e envia as respostas |
 
 A Evolution (`127.0.0.1:8080`) e o backend (`127.0.0.1:3100`) só ficam acessíveis no próprio computador,
 nunca pela rede.
@@ -80,6 +80,19 @@ Aperte `Ctrl + C` para sair dos logs. Os serviços continuam rodando.
 O backend configura sozinho, em cada número, o webhook, a opção de ignorar grupos e a opção de não marcar como lida
 automaticamente. **Não altere essas opções no painel da Evolution.** A Fase 5 vai trazer uma tela própria de números.
 
+## Usar o sistema
+
+Abra **<http://localhost:3100>** no navegador.
+
+- **Esquerda**: todas as conversas de todos os números, da mais recente para a mais antiga. A aba **Responderam** mostra
+  só os leads que responderam; a aba **Todas** mostra tudo. O filtro **Número** mostra só um WhatsApp. Cada conversa
+  tem um selo colorido com o número por onde ela acontece e o contador de não lidas.
+- **Direita**: o chat aberto. **Enter** envia e **Shift + Enter** quebra a linha. A resposta sai sempre pelo mesmo
+  número da conversa.
+- Abrir a conversa zera as não lidas **no sistema**. O tique azul só vai para o lead quando alguém responde.
+- Por enquanto as mensagens novas aparecem em até 5 segundos. Na Fase 4 elas passam a aparecer na hora.
+- Áudios, imagens e documentos aparecem como rótulo (ex.: "🎤 Mensagem de voz"). Ouvir e ver vem na Fase 6.
+
 ## Como atualizar (a cada nova fase)
 
 ```powershell
@@ -123,13 +136,19 @@ Dá para abrir as rotas `GET` direto no navegador.
 - **Troquei a senha do Postgres no `.env` depois de já ter subido**: o banco continua com a senha antiga. Volte a
   senha antiga no `.env` ou me peça ajuda.
 
-## Desenvolvimento (backend)
+## Desenvolvimento
 
-O backend é Node 24 + TypeScript, rodando o `.ts` direto (sem etapa de compilação), com Express e Prisma 7.
+- **Backend** (`backend/`): Node 24 + TypeScript rodando o `.ts` direto (sem etapa de compilação), Express 5 e Prisma 7.
+- **Frontend** (`frontend/`): React 19 + Vite. Na imagem Docker ele é compilado e servido pelo próprio backend.
 
 ```powershell
 cd backend
 npm install
 npm test          # testes das regras de mensagens (@lid, grupos, tipos, status)
 npm run check     # verificação de tipos
+
+cd ..\frontend
+npm install
+npm run dev       # tela em http://localhost:5173, usando o backend do Docker (porta 3100)
+npm run check
 ```

@@ -1,0 +1,7 @@
+# Nunca enviar segredos nem dependências locais para dentro da imagem.
+.env
+.git
+**/node_modules
+**/dist
+backend/src/generated
+backend/public

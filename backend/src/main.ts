@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { apiRouter } from './api.ts';
 import { config } from './config.ts';
@@ -12,6 +14,10 @@ app.get('/health', (_req, res) => {
 });
 app.use('/webhook', webhookRouter);
 app.use('/api', apiRouter);
+
+// Site (frontend já compilado). No Docker fica em /app/public.
+const publicDir = process.env.PUBLIC_DIR ?? fileURLToPath(new URL('../public', import.meta.url));
+if (existsSync(publicDir)) app.use(express.static(publicDir));
 
 const server = app.listen(config.port, (error?: Error) => {
   if (error) {

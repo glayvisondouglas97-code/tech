@@ -2,7 +2,7 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { prisma } from './db.ts';
 import { evolution, EvolutionError } from './evolution.ts';
-import type { Instance, Prisma } from './generated/prisma/client.ts';
+import type { Contact, Conversation, Instance, Prisma } from './generated/prisma/client.ts';
 import { importHistory } from './history.ts';
 import { enqueue } from './queue.ts';
 import { saveMessage, upsertInstance } from './store.ts';
@@ -53,20 +53,30 @@ apiRouter.get('/conversations', async (req, res) => {
     ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     include: { contact: true, instance: true },
   });
-
-  res.json(
-    conversations.map((c) => ({
-      id: c.id,
-      unreadCount: c.unreadCount,
-      leadReplied: c.leadReplied,
-      lastMessageAt: c.lastMessageAt,
-      lastMessagePreview: c.lastMessagePreview,
-      lastMessageFromMe: c.lastMessageFromMe,
-      contact: { id: c.contact.id, name: c.contact.name, phone: phoneOf(c.contact.phoneJid) },
-      instance: { id: c.instance.id, name: c.instance.name, nickname: c.instance.nickname },
-    })),
-  );
+  res.json(conversations.map(toConversationDto));
 });
+
+apiRouter.get('/conversations/:id', async (req, res) => {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: parseId(req.params.id) },
+    include: { contact: true, instance: true },
+  });
+  if (!conversation) throw new HttpError(404, 'Conversa não encontrada');
+  res.json(toConversationDto(conversation));
+});
+
+function toConversationDto(c: Conversation & { contact: Contact; instance: Instance }) {
+  return {
+    id: c.id,
+    unreadCount: c.unreadCount,
+    leadReplied: c.leadReplied,
+    lastMessageAt: c.lastMessageAt,
+    lastMessagePreview: c.lastMessagePreview,
+    lastMessageFromMe: c.lastMessageFromMe,
+    contact: { id: c.contact.id, name: c.contact.name, phone: phoneOf(c.contact.phoneJid) },
+    instance: { id: c.instance.id, name: c.instance.name, nickname: c.instance.nickname, status: c.instance.status },
+  };
+}
 
 // Mensagens de uma conversa, em ordem cronológica. ?before=<id da mensagem mais antiga já carregada>
 apiRouter.get('/conversations/:id/messages', async (req, res) => {

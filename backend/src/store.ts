@@ -22,13 +22,15 @@ export type SaveOptions = {
 
 export type SavedMessage = { message: Message; conversation: Conversation };
 
+// Obs.: evitamos o upsert do Prisma porque ele consome um número da sequência de IDs a cada chamada.
 export async function upsertInstance(name: string, data: { status?: string; phoneJid?: string | null } = {}): Promise<Instance> {
   const phoneJid = data.phoneJid ? normalizeJid(data.phoneJid) : undefined;
-  return prisma.instance.upsert({
-    where: { name },
-    create: { name, status: data.status ?? 'close', phoneJid },
-    update: { status: data.status, phoneJid },
-  });
+  const existing = await prisma.instance.findUnique({ where: { name } });
+  if (!existing) return prisma.instance.create({ data: { name, status: data.status ?? 'close', phoneJid } });
+  if ((data.status === undefined || data.status === existing.status) && (phoneJid === undefined || phoneJid === existing.phoneJid)) {
+    return existing;
+  }
+  return prisma.instance.update({ where: { id: existing.id }, data: { status: data.status, phoneJid } });
 }
 
 // Salva uma mensagem. Retorna null se ela for ignorada (grupo, status, tipo sem conteúdo) ou se já existia.
@@ -39,7 +41,7 @@ export async function saveMessage(instanceName: string, msg: WaMessage, options:
   const content = parseContent(msg);
   if (!content) return null;
 
-  const instance = (await prisma.instance.findUnique({ where: { name: instanceName } })) ?? (await upsertInstance(instanceName));
+  const instance = await upsertInstance(instanceName);
   if (instance.phoneJid && jids.phoneJid === instance.phoneJid) return null; // conversa consigo mesmo
 
   const sentAt = timestampToDate(msg.messageTimestamp);
@@ -64,11 +66,10 @@ export async function saveMessage(instanceName: string, msg: WaMessage, options:
       conversation = await tx.conversation.findUniqueOrThrow({ where: { id: options.conversationId } });
     } else {
       const contact = await resolveContact(tx, jids.phoneJid, jids.lidJid, leadName);
-      conversation = await tx.conversation.upsert({
-        where: { instanceId_contactId: { instanceId: instance.id, contactId: contact.id } },
-        create: { instanceId: instance.id, contactId: contact.id, lastMessageAt: sentAt },
-        update: {},
-      });
+      conversation =
+        (await tx.conversation.findUnique({
+          where: { instanceId_contactId: { instanceId: instance.id, contactId: contact.id } },
+        })) ?? (await tx.conversation.create({ data: { instanceId: instance.id, contactId: contact.id, lastMessageAt: sentAt } }));
     }
 
     const message = await tx.message.create({

@@ -78,7 +78,7 @@ services:
       - evolution_instances:/evolution/instances
 
   app:
-    build: ./backend
+    build: .
     restart: unless-stopped
     depends_on:
       postgres:

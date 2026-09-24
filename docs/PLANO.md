@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fase 1 concluída e testada pelo usuário. Fase 2 (backend) entregue, aguardando teste.**
+Status: **Fases 1 e 2 concluídas e testadas pelo usuário. Fase 3 (tela de conversas) entregue, aguardando teste.**
 
 ## 1. Versão da Evolution API
 
