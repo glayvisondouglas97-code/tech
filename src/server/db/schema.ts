@@ -177,6 +177,8 @@ export interface WaInstancesTable {
   phone_jid: string | null;
   /** open | connecting | close */
   status: Generated<string>;
+  /** Responsável pelo número: o atendente só vê as conversas dos números dele. */
+  owner_id: string | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }

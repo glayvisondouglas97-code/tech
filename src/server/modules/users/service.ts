@@ -10,6 +10,7 @@ import { audit } from '../../lib/audit';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { spDayStart } from '../../lib/time';
 import { releaseLeads } from '../leads/service';
+import { refreshUserAccess } from '../whatsapp/realtime';
 
 type Db = Kysely<Database>;
 
@@ -186,7 +187,9 @@ export async function updateUser(
     })
     .where('id', '=', id)
     .execute();
-  // Mudou o papel: as sessões abertas recarregam o papel novo na próxima requisição (vem do banco).
+  // Mudou o papel: as sessões abertas recarregam o papel novo na próxima requisição (vem do banco),
+  // e o tempo real passa a mandar só o que o papel novo pode ver (conversas de WhatsApp).
+  if (input.role && input.role !== user.role) refreshUserAccess(id, input.role);
   await audit(db, {
     userId: actor.id,
     action: 'alterou_usuario',

@@ -62,6 +62,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   criou_numero: 'Adicionou número de WhatsApp',
   renomeou_numero: 'Renomeou número de WhatsApp',
   conectou_numero: 'Conectou número de WhatsApp',
+  trocou_responsavel_numero: 'Trocou o responsável de um número de WhatsApp',
 };
 
 export function actionLabel(action: string): string {
@@ -126,6 +127,7 @@ export const ACTIVITY_CATEGORIES = {
       'criou_numero',
       'renomeou_numero',
       'conectou_numero',
+      'trocou_responsavel_numero',
     ],
   },
 } as const;

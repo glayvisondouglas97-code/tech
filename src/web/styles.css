@@ -854,6 +854,26 @@ main {
   main {
     padding: 8px 16px calc(104px + env(safe-area-inset-bottom, 0px));
   }
+  /* A página não rola: só o conteúdo rola por dentro. Assim o navegador não esconde nem mostra a barra de
+     endereço no meio da rolagem, e a barra de atalhos de baixo nunca sai do lugar. */
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+  }
+  .app-main {
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
 }
 @media (min-width: 640px) and (max-width: 1023.98px) {
   main {
@@ -5002,4 +5022,22 @@ dialog.dlg:has(.wa-qr-layout) {
   .wa-lead-list {
     display: none;
   }
+}
+
+/* Responsável pelo número (tela Números) */
+.wa-num-owner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+}
+.wa-num-owner > span {
+  color: var(--muted);
+}
+.wa-num-owner .select {
+  flex: 1;
+  min-width: 0;
+  max-width: 240px;
 }

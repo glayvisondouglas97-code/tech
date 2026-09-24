@@ -4,19 +4,32 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { sql } from 'kysely';
 import { z } from 'zod';
 import { MAX_UPLOAD_BYTES } from '../../shared/conversations';
-import { requirePermission, requireUser } from '../http/auth-hooks';
+import { can } from '../../shared/roles';
+import { requireUser } from '../http/auth-hooks';
 import { parse } from '../http/validation';
 import { audit } from '../lib/audit';
-import { AppError, badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { leadForChat, parseLeadId } from '../modules/leads/service';
-import { conversationDto, conversationsQuery, instanceDto, messageDto } from '../modules/whatsapp/dto';
+import {
+  assertConversationVisible,
+  canSeeNumber,
+  manageableNumber,
+  visibleNumbers,
+} from '../modules/whatsapp/access';
+import {
+  conversationDto,
+  conversationsQuery,
+  instanceDto,
+  instancesQuery,
+  messageDto,
+} from '../modules/whatsapp/dto';
 import { evolution } from '../modules/whatsapp/evolution';
 import { importHistory } from '../modules/whatsapp/history';
 import { nextInstanceName } from '../modules/whatsapp/instances';
 import { startLeadChat } from '../modules/whatsapp/leads';
 import { baseMime, ensureMedia, isInline, isMediaMessage, mediaFile } from '../modules/whatsapp/media';
 import { evolutionFailure, sendToConversation } from '../modules/whatsapp/messaging';
-import { publishConversation, publishInstance } from '../modules/whatsapp/realtime';
+import { publishConversation, publishInstance, publishOwnerChange } from '../modules/whatsapp/realtime';
 import { upsertInstance } from '../modules/whatsapp/store';
 
 // Barras e caracteres de controle não entram no nome do arquivo enviado.
@@ -39,15 +52,21 @@ export async function whatsappRoutes(app: FastifyInstance) {
   const db = app.db;
 
   // ---------- números ----------
+  // Cada pessoa cadastra e cuida dos próprios números. Dono, administrador e supervisor veem todos;
+  // dono e administrador também conectam, renomeiam e trocam o responsável de qualquer um.
+
   app.get('/instances', async (req) => {
-    requireUser(req);
-    const rows = await db.selectFrom('wa_instances').selectAll().orderBy('name').execute();
+    const user = requireUser(req);
+    const rows = await instancesQuery(db).where(visibleNumbers(user)).orderBy('i.name').execute();
     return rows.map(instanceDto);
   });
 
-  // Cria um número novo na Evolution, já com webhook e opções. Depois a tela pede o QR Code.
+  const loadDto = async (id: number) =>
+    instanceDto(await instancesQuery(db).where('i.id', '=', id).executeTakeFirstOrThrow());
+
+  // Cria um número novo na Evolution, já com webhook e opções. Quem cadastra fica como responsável.
   app.post('/instances', async (req, reply) => {
-    const user = requirePermission(req, 'manageNumbers');
+    const user = requireUser(req);
     const { nickname } = parse(z.object({ nickname: nicknameSchema }), req.body ?? {});
     if (!nickname) throw badRequest('Informe um apelido, ex.: "WhatsApp 3 - João".');
     const name = await nextInstanceName(db).catch((e) =>
@@ -57,11 +76,11 @@ export async function whatsappRoutes(app: FastifyInstance) {
     await upsertInstance(db, name, { status: 'close' });
     const instance = await db
       .updateTable('wa_instances')
-      .set({ nickname, updated_at: sql`now()` })
+      .set({ nickname, owner_id: user.id, updated_at: sql`now()` })
       .where('name', '=', name)
       .returningAll()
       .executeTakeFirstOrThrow();
-    publishInstance(instance);
+    await publishOwnerChange(instance.id, null, user.id);
     await audit(db, {
       userId: user.id,
       action: 'criou_numero',
@@ -70,39 +89,88 @@ export async function whatsappRoutes(app: FastifyInstance) {
       details: { apelido: nickname },
       ip: req.ip,
     });
-    return reply.status(201).send(instanceDto(instance));
+    return reply.status(201).send(await loadDto(instance.id));
   });
 
-  // Troca o apelido exibido. Vazio volta a mostrar o nome técnico.
+  // Troca o apelido (vazio volta a mostrar o nome técnico) e, para dono e administrador, o responsável.
   app.patch('/instances/:id', async (req) => {
-    const user = requirePermission(req, 'manageNumbers');
+    const user = requireUser(req);
     const id = parseId((req.params as { id: string }).id);
-    const { nickname } = parse(z.object({ nickname: nicknameSchema }), req.body ?? {});
-    const instance = await db
+    const body = parse(
+      z.object({
+        nickname: z.string().trim().max(60, 'Apelido muito longo (máximo 60 caracteres)').nullish(),
+        ownerId: z.string().uuid('Responsável inválido.').nullish(),
+      }),
+      req.body ?? {},
+    );
+    const instance = await manageableNumber(db, user, id);
+    const changes: { nickname?: string | null; owner_id?: string | null } = {};
+    if (body.nickname !== undefined) changes.nickname = body.nickname || null;
+    if (body.ownerId !== undefined && body.ownerId !== instance.owner_id) {
+      if (!can.manageNumbers(user.role)) {
+        throw forbidden('Só o dono ou um administrador troca o responsável de um número.');
+      }
+      if (body.ownerId) {
+        const owner = await db
+          .selectFrom('users')
+          .select('id')
+          .where('id', '=', body.ownerId)
+          .where('active', '=', true)
+          .executeTakeFirst();
+        if (!owner) throw badRequest('Essa pessoa não está ativa na equipe.');
+      }
+      changes.owner_id = body.ownerId ?? null;
+    }
+    if (!Object.keys(changes).length) return loadDto(id);
+
+    await db
       .updateTable('wa_instances')
-      .set({ nickname, updated_at: sql`now()` })
+      .set({ ...changes, updated_at: sql`now()` })
       .where('id', '=', id)
-      .returningAll()
-      .executeTakeFirst();
-    if (!instance) throw notFound('Número não encontrado.');
-    publishInstance(instance);
-    await audit(db, {
-      userId: user.id,
-      action: 'renomeou_numero',
-      entity: 'numero',
-      entityId: instance.name,
-      details: { apelido: nickname },
-      ip: req.ip,
-    });
-    return instanceDto(instance);
+      .execute();
+    if (changes.owner_id !== undefined) {
+      await publishOwnerChange(id, instance.owner_id, changes.owner_id);
+      const names = await db
+        .selectFrom('users')
+        .select(['id', 'name'])
+        .where(
+          'id',
+          'in',
+          [instance.owner_id, changes.owner_id].filter((v): v is string => !!v),
+        )
+        .execute()
+        .then((rows) => new Map(rows.map((r) => [r.id, r.name])));
+      await audit(db, {
+        userId: user.id,
+        action: 'trocou_responsavel_numero',
+        entity: 'numero',
+        entityId: instance.name,
+        details: {
+          de: instance.owner_id ? (names.get(instance.owner_id) ?? instance.owner_id) : 'sem responsável',
+          para: changes.owner_id ? (names.get(changes.owner_id) ?? changes.owner_id) : 'sem responsável',
+        },
+        ip: req.ip,
+      });
+    } else {
+      await publishInstance(id);
+    }
+    if (changes.nickname !== undefined) {
+      await audit(db, {
+        userId: user.id,
+        action: 'renomeou_numero',
+        entity: 'numero',
+        entityId: instance.name,
+        details: { apelido: changes.nickname },
+        ip: req.ip,
+      });
+    }
+    return loadDto(id);
   });
 
   // Conecta ou reconecta um número. Se o WhatsApp pedir, os QR Codes chegam pelo tempo real (instance:qrcode).
   app.post('/instances/:id/connect', async (req) => {
-    const user = requirePermission(req, 'manageNumbers');
-    const id = parseId((req.params as { id: string }).id);
-    const instance = await db.selectFrom('wa_instances').selectAll().where('id', '=', id).executeTakeFirst();
-    if (!instance) throw notFound('Número não encontrado.');
+    const user = requireUser(req);
+    const instance = await manageableNumber(db, user, parseId((req.params as { id: string }).id));
     const result = await evolution
       .connect(instance.name)
       .catch((e) => evolutionFailure(e, 'Não foi possível conectar'));
@@ -122,14 +190,8 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   // Reimporta o histórico recente de um número (ferramenta de manutenção).
   app.post('/instances/:id/import-history', async (req) => {
-    requirePermission(req, 'manageNumbers');
-    const id = parseId((req.params as { id: string }).id);
-    const instance = await db
-      .selectFrom('wa_instances')
-      .select('name')
-      .where('id', '=', id)
-      .executeTakeFirst();
-    if (!instance) throw notFound('Número não encontrado.');
+    const user = requireUser(req);
+    const instance = await manageableNumber(db, user, parseId((req.params as { id: string }).id));
     return importHistory(db, instance.name).catch((e) => evolutionFailure(e, 'Não foi possível importar'));
   });
 
@@ -153,10 +215,12 @@ export async function whatsappRoutes(app: FastifyInstance) {
     const user = requireUser(req);
     const lead = await leadForChat(db, user, parseLeadId((req.params as { id: string }).id));
     const rows = await db
-      .selectFrom('wa_conversations')
-      .select(['id', 'instance_id'])
-      .where('lead_id', '=', lead.id)
-      .orderBy('last_message_at', (ob) => ob.desc().nullsLast())
+      .selectFrom('wa_conversations as c')
+      .innerJoin('wa_instances as i', 'i.id', 'c.instance_id')
+      .select(['c.id', 'c.instance_id'])
+      .where('c.lead_id', '=', lead.id)
+      .where(visibleNumbers(user))
+      .orderBy('c.last_message_at', (ob) => ob.desc().nullsLast())
       .execute();
     return rows.map((r) => ({ id: r.id, instanceId: r.instance_id }));
   });
@@ -166,7 +230,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
   // Lista de conversas, da mais recente para a mais antiga.
   // ?tab=responderam|todas  ?instanceId=3  ?q=maria  ?cursor=<id da última conversa recebida>  ?limit=50
   app.get('/conversations', async (req) => {
-    requireUser(req);
+    const user = requireUser(req);
     const q = parse(
       z.object({
         tab: z.enum(['responderam', 'todas']).default('todas'),
@@ -178,7 +242,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
       req.query,
     );
     // Conversa aberta pelo "Chamar" e ainda sem mensagens não entra na lista (só abre pelo lead).
-    let query = conversationsQuery(db).where('c.last_message_at', 'is not', null);
+    let query = conversationsQuery(db).where(visibleNumbers(user)).where('c.last_message_at', 'is not', null);
     if (q.tab === 'responderam') query = query.where('c.lead_replied', '=', true);
     if (q.instanceId) query = query.where('c.instance_id', '=', q.instanceId);
     if (q.q) {
@@ -207,34 +271,41 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   // Números para os selos do menu: conversas com mensagens não lidas e números desconectados.
   app.get('/conversations/stats', async (req) => {
-    requireUser(req);
+    const user = requireUser(req);
     const [unread, disconnected] = await Promise.all([
       db
-        .selectFrom('wa_conversations')
+        .selectFrom('wa_conversations as c')
+        .innerJoin('wa_instances as i', 'i.id', 'c.instance_id')
         .select((eb) => eb.fn.countAll<number>().as('n'))
-        .where('unread_count', '>', 0)
+        .where('c.unread_count', '>', 0)
+        .where(visibleNumbers(user))
         .executeTakeFirstOrThrow(),
       db
-        .selectFrom('wa_instances')
+        .selectFrom('wa_instances as i')
         .select((eb) => eb.fn.countAll<number>().as('n'))
-        .where('status', '<>', 'open')
+        .where('i.status', '<>', 'open')
+        .where(visibleNumbers(user))
         .executeTakeFirstOrThrow(),
     ]);
     return { unreadConversations: Number(unread.n), disconnectedInstances: Number(disconnected.n) };
   });
 
   app.get('/conversations/:id', async (req) => {
-    requireUser(req);
+    const user = requireUser(req);
     const id = parseId((req.params as { id: string }).id);
-    const row = await conversationsQuery(db).where('c.id', '=', id).executeTakeFirst();
+    const row = await conversationsQuery(db)
+      .where('c.id', '=', id)
+      .where(visibleNumbers(user))
+      .executeTakeFirst();
     if (!row) throw notFound('Conversa não encontrada.');
     return conversationDto(row);
   });
 
   // Mensagens de uma conversa, em ordem cronológica. ?before=<id da mensagem mais antiga já carregada>
   app.get('/conversations/:id/messages', async (req) => {
-    requireUser(req);
+    const user = requireUser(req);
     const id = parseId((req.params as { id: string }).id);
+    await assertConversationVisible(db, user, id);
     const q = parse(
       z.object({
         before: idSchema.optional(),
@@ -254,8 +325,9 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   // Zera o contador de não lidas no sistema (não manda tique azul para o contato).
   app.post('/conversations/:id/read', async (req, reply) => {
-    requireUser(req);
+    const user = requireUser(req);
     const id = parseId((req.params as { id: string }).id);
+    await assertConversationVisible(db, user, id);
     const r = await db
       .updateTable('wa_conversations')
       .set({ unread_count: 0 })
@@ -274,6 +346,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
       z.object({ text: z.string().trim().min(1, 'Mensagem vazia').max(4096) }),
       req.body,
     );
+    await assertConversationVisible(db, user, id);
     const message = await sendToConversation(db, id, user.id, (instance, number) =>
       evolution.sendText(instance, number, text),
     );
@@ -298,6 +371,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
     uploads.post('/conversations/:id/audio', { bodyLimit: MAX_UPLOAD_BYTES }, async (req, reply) => {
       const user = requireUser(req);
       const id = parseId((req.params as { id: string }).id);
+      await assertConversationVisible(db, user, id);
       const file = uploadedFile(req);
       if (!file.mime.startsWith('audio/')) throw badRequest('Formato de áudio inválido.');
       const message = await sendToConversation(
@@ -314,6 +388,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
     uploads.post('/conversations/:id/media', { bodyLimit: MAX_UPLOAD_BYTES }, async (req, reply) => {
       const user = requireUser(req);
       const id = parseId((req.params as { id: string }).id);
+      await assertConversationVisible(db, user, id);
       const file = uploadedFile(req);
       const query = req.query as { fileName?: string; caption?: string };
       const fileName =
@@ -343,10 +418,18 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   // Abre a mídia de uma mensagem. Se ainda não estiver no disco, baixa pela Evolution primeiro.
   app.get('/messages/:id/media', async (req, reply) => {
-    requireUser(req);
+    const user = requireUser(req);
     const id = parseId((req.params as { id: string }).id);
-    const message = await db.selectFrom('wa_messages').selectAll().where('id', '=', id).executeTakeFirst();
-    if (!message || !isMediaMessage(message)) throw notFound('Mídia não encontrada.');
+    const found = await db
+      .selectFrom('wa_messages as m')
+      .innerJoin('wa_instances as i', 'i.id', 'm.instance_id')
+      .selectAll('m')
+      .select('i.owner_id')
+      .where('m.id', '=', id)
+      .executeTakeFirst();
+    if (!found || !canSeeNumber(user, found)) throw notFound('Mídia não encontrada.');
+    const { owner_id: _owner, ...message } = found;
+    if (!isMediaMessage(message)) throw notFound('Mídia não encontrada.');
     let stored: typeof message;
     try {
       stored = await ensureMedia(db, message);

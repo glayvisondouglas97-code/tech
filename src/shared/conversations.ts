@@ -9,6 +9,8 @@ export interface InstanceInfo {
   phone: string | null;
   /** open | connecting | close */
   status: string;
+  /** Responsável pelo número (o atendente só vê as conversas dos números dele). */
+  owner: { id: string; name: string } | null;
 }
 
 export interface ConversationItem {

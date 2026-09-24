@@ -160,8 +160,15 @@ test('dois atendentes pegam leads ao mesmo tempo e nunca recebem o mesmo', async
 });
 
 test('atendente chama pelo WhatsApp do sistema e o lead é marcado sozinho', async ({ browser }) => {
-  const { context, page } = await newAttendantContext(browser);
   const ana = attendants[0] as (typeof attendants)[number];
+  // A gestora escolhe a Ana como responsável pelo número (a atendente só vê os números dela).
+  await nav(admin, 'Números');
+  const numberCard = admin.locator('.wa-num', { hasText: 'whatsapp-01' });
+  await numberCard.getByRole('combobox').selectOption({ label: ana.name });
+  await expect(admin.getByText(`Agora ${ana.name} é responsável por whatsapp-01.`)).toBeVisible();
+  await shot(admin, '05a-numeros-responsavel');
+
+  const { context, page } = await newAttendantContext(browser);
   await login(page, ana.email, ana.password);
   const first = page.locator('li.lead').first();
   // Lead de pessoa jurídica: empresa em destaque e o sócio embaixo.
@@ -178,9 +185,11 @@ test('atendente chama pelo WhatsApp do sistema e o lead é marcado sozinho', asy
   await shot(page, '05b-escolher-numero');
   await dialog.getByRole('button', { name: /whatsapp-01/ }).click();
   await expect(page).toHaveURL(/\/conversas\/\d+$/);
+  // Título do chat = empresa do lead; a faixa do lead mostra a situação e o sócio.
+  await expect(page.locator('.wa-chat-title')).toContainText(name);
   const strip = page.locator('.wa-lead');
-  await expect(strip).toContainText(name);
   await expect(strip).toContainText('Na sua fila');
+  await expect(strip).toContainText(`Sócio: ${socio}`);
   await expect(page.getByText('Conversa nova')).toBeVisible();
   await expect(page.getByPlaceholder('Digite uma mensagem')).toHaveValue('');
   await shot(page, '05c-conversa-nova');

@@ -92,7 +92,7 @@ export function App() {
           <Route
             path="/numeros"
             element={
-              <Protected perm="manageNumbers">
+              <Protected>
                 <NumbersPage />
               </Protected>
             }

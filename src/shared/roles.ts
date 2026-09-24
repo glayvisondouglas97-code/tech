@@ -46,7 +46,15 @@ export const can = {
   viewAudit: isAdmin,
   /** Ferramentas da LGPD (buscar, exportar, anonimizar e excluir dados de uma pessoa). */
   privacy: isOwner,
-  /** Adicionar, conectar (QR Code) e renomear os números de WhatsApp. */
+  /**
+   * Ver as conversas de todos os números de WhatsApp. Sem isso (atendente), só as dos números de que a
+   * pessoa é responsável.
+   */
+  seeAllNumbers: isManager,
+  /**
+   * Conectar, renomear e trocar o responsável de qualquer número. Todo usuário pode cadastrar os próprios
+   * números e cuidar deles.
+   */
   manageNumbers: isAdmin,
 } satisfies Record<string, (r: Role) => boolean>;
 

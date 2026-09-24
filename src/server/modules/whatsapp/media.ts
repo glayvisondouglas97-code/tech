@@ -76,7 +76,7 @@ export async function storeMedia(
     .where('id', '=', message.id)
     .returningAll()
     .executeTakeFirstOrThrow();
-  publishMessage('message:updated', updated);
+  await publishMessage('message:updated', updated);
   return updated;
 }
 

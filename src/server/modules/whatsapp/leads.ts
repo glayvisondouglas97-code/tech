@@ -3,9 +3,10 @@ import type { Kysely } from 'kysely';
 import type { LeadChatResult } from '../../../shared/conversations';
 import type { AuthUser } from '../../auth/sessions';
 import type { Database } from '../../db/schema';
-import { AppError, notFound } from '../../lib/errors';
+import { AppError } from '../../lib/errors';
 import { displayPhone } from '../imports/phone';
 import { leadForChat, markWhatsappOpened } from '../leads/service';
+import { visibleNumber } from './access';
 import { evolution } from './evolution';
 import { ensureConnected, evolutionFailure } from './messaging';
 import { normalizeJid } from './parse';
@@ -37,12 +38,8 @@ export async function startLeadChat(
   instanceId: number,
 ): Promise<LeadChatResult> {
   const lead = await leadForChat(db, user, leadId);
-  const instance = await db
-    .selectFrom('wa_instances')
-    .selectAll()
-    .where('id', '=', instanceId)
-    .executeTakeFirst();
-  if (!instance) throw notFound('Número não encontrado.');
+  // O atendente chama só pelos números dele; dono, administrador e supervisor, por qualquer um.
+  const instance = await visibleNumber(db, user, instanceId);
   await ensureConnected(db, instance);
 
   const result = await evolution

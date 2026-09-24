@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 a 8 concluídas. Fase 9 (botão Chamar pelo sistema) entregue, aguardando teste.**
+Status: **Fases 1 a 9 concluídas. Números por responsável e barra do celular fixa entregues, aguardando teste.**
 
 > A partir da Fase 8, a Central virou parte do **Chamador de Leads** (Fastify + Kysely). As seções 3, 4.1 a 4.6
 > descrevem como cada parte foi pensada; onde falam em Express, Prisma, `backend/`, `frontend/`, `node src/cli.ts` ou
@@ -254,6 +254,16 @@ por número em `src/server/modules/whatsapp/realtime.ts`.
   na fila de quem enviou); a resposta do lead passa para "Respondeu". Tudo fica no histórico do lead.
 - **Saíram** o link `wa.me`, as mensagens prontas (tela, rotas e tabela) e a rota `POST /api/leads/:id/whatsapp`.
 
+## 4.9 Números por responsável (depois da Fase 9)
+
+- Todo usuário cadastra e conecta os próprios números em **Números** e fica como responsável por eles.
+- O atendente vê só as conversas dos números dele (lista, chat, contadores, "Chamar" e tempo real). Dono, administrador
+  e supervisor veem todas.
+- Dono e administrador conectam, renomeiam e trocam o responsável de qualquer número (campo **Responsável** no cartão).
+  Números cadastrados antes disso ficam sem responsável até a gestão escolher um.
+- **Celular:** a barra de atalhos de baixo fica sempre fixa. A página não rola; só a área do conteúdo rola por dentro, então
+  o navegador não esconde a barra de endereço no meio da rolagem. A barra some só dentro de uma conversa do WhatsApp.
+
 ## 5. Decisões tomadas
 
 1. **Histórico ao conectar um número**: importar o histórico recente que o WhatsApp envia ao conectar, só de
@@ -270,3 +280,5 @@ por número em `src/server/modules/whatsapp/realtime.ts`.
 8. **Junção com o Chamador** (Fase 8): visual do Chamador; todos veem todas as conversas; resultado do lead marcado
    sozinho (1ª mensagem enviada pelo sistema → "Mensagem enviada"; resposta do lead → "Respondeu"); sem mensagens
    prontas e sem link `wa.me` (Fase 9).
+9. **Números por responsável**: o atendente vê só as conversas dos números dele e pode cadastrar os próprios; dono,
+   administrador e supervisor veem todas as conversas; dono e administrador escolhem o responsável de cada número.

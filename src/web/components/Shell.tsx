@@ -68,7 +68,6 @@ const NAV: NavItem[] = [
     to: '/numeros',
     label: 'Números',
     icon: <IconSmartphone />,
-    perm: 'manageNumbers',
     count: 'desconectados',
     whatsapp: true,
     group: 'manage',
@@ -76,6 +75,12 @@ const NAV: NavItem[] = [
   { to: '/usuarios', label: 'Usuários', icon: <IconUsers />, perm: 'manageUsers', group: 'manage' },
   { to: '/auditoria', label: 'Auditoria', icon: <IconShield />, perm: 'viewAudit', group: 'manage' },
 ];
+
+/** Volta ao topo: no computador rola a página; no celular, a área do conteúdo. */
+export function scrollContentToTop() {
+  window.scrollTo(0, 0);
+  document.querySelector('.app-main')?.scrollTo(0, 0);
+}
 
 export function useQueueStats() {
   return useQuery({
@@ -319,9 +324,13 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.title = unread ? `(${unread}) ${name}` : name;
   }, [name, unread]);
-  // Fecha a gaveta do celular ao trocar de tela.
+  // Ao trocar de tela: fecha a gaveta do celular e volta o conteúdo ao topo (no celular, quem rola é a área
+  // do conteúdo, não a página).
   // biome-ignore lint/correctness/useExhaustiveDependencies: reage só à troca de rota
-  useEffect(() => setDrawer(false), [location.pathname]);
+  useEffect(() => {
+    setDrawer(false);
+    scrollContentToTop();
+  }, [location.pathname]);
   useEffect(() => {
     if (!drawer) return;
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false);

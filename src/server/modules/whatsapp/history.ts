@@ -58,7 +58,14 @@ export async function importHistory(
     console.log(
       `[histórico] ${instanceName}: ${saved} mensagens novas (de ${total} dos últimos ${historyDays} dias)`,
     );
-    if (saved > 0) publishReload();
+    if (saved > 0) {
+      const instance = await db
+        .selectFrom('wa_instances')
+        .select('id')
+        .where('name', '=', instanceName)
+        .executeTakeFirst();
+      if (instance) await publishReload(instance.id);
+    }
     return { total, saved };
   } finally {
     running.delete(instanceName);

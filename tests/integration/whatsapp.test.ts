@@ -171,12 +171,11 @@ describe('lista, busca e envio', () => {
 });
 
 describe('permissões', () => {
-  it('atendente vê e responde as conversas, mas não mexe nos números', async () => {
-    expect((await ana.get('/api/conversations')).statusCode).toBe(200);
-    expect((await ana.get('/api/instances')).statusCode).toBe(200);
-    expect((await ana.post('/api/instances', { nickname: 'x' })).statusCode).toBe(403);
-    expect((await ana.patch('/api/instances/1', { nickname: 'x' })).statusCode).toBe(403);
-    expect((await ana.post('/api/instances/1/connect', {})).statusCode).toBe(403);
+  it('atendente não vê nem mexe nos números de que não é responsável', async () => {
+    expect((await ana.get('/api/conversations?tab=todas')).json()).toEqual([]);
+    expect((await ana.get('/api/instances')).json()).toEqual([]);
+    expect((await ana.patch('/api/instances/1', { nickname: 'x' })).statusCode).toBe(404);
+    expect((await ana.post('/api/instances/1/connect', {})).statusCode).toBe(404);
   });
 
   it('sem login: 401; sem o token CSRF: 403', async () => {
@@ -194,7 +193,12 @@ describe('permissões', () => {
   it('dono cria número (já com webhook e opções)', async () => {
     const r = await dono.post('/api/instances', { nickname: 'WhatsApp 2 - João' });
     expect(r.statusCode, r.body).toBe(201);
-    expect(r.json()).toMatchObject({ name: 'whatsapp-02', nickname: 'WhatsApp 2 - João', status: 'close' });
+    expect(r.json()).toMatchObject({
+      name: 'whatsapp-02',
+      nickname: 'WhatsApp 2 - João',
+      status: 'close',
+      owner: { name: 'Dono' },
+    });
     const created = fake.calls.find((c) => c.url === '/instance/create')?.body as Record<string, unknown>;
     expect(created).toMatchObject({ instanceName: 'whatsapp-02', groupsIgnore: true, readMessages: false });
   });

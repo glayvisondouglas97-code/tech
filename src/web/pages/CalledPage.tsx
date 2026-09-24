@@ -14,6 +14,7 @@ import {
   IconUndo,
 } from '../components/Icons';
 import { LeadDrawer } from '../components/LeadDrawer';
+import { scrollContentToTop } from '../components/Shell';
 import { Avatar, Empty, Pager, ResultPill, ResultSelect, Skeleton } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { fmtN, fmtWhen } from '../lib/format';
@@ -399,7 +400,7 @@ export function CalledPage() {
         total={total}
         onPage={(p) => {
           setPage(p);
-          window.scrollTo(0, 0);
+          scrollContentToTop();
         }}
       />
       <LeadDrawer leadId={drawerId} onClose={() => setDrawerId(null)} />

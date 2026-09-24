@@ -107,7 +107,9 @@ Entre no site com o e-mail e a senha mostrada (ela aparece uma vez só). Depois:
 2. Em cada celular: WhatsApp → **Dispositivos conectados** → toque no aparelho **Central WhatsApp** antigo (o do seu
    computador) → **Desconectar**.
 3. No site do VPS: **Números** → **Adicionar número** → digite o apelido → **Criar e conectar** → escaneie o QR Code
-   com cada celular.
+   com cada celular. Quem cadastra fica como responsável: o ideal é cada atendente entrar com o próprio login e
+   cadastrar o próprio número. Se a gestão cadastrar, escolha depois o **Responsável** no cartão do número (o
+   atendente só vê as conversas dos números de que é responsável).
 
 O histórico dos últimos 14 dias de cada número é importado sozinho ao conectar.
 

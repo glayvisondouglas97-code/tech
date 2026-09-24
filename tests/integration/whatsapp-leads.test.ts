@@ -23,9 +23,10 @@ let dono: Client;
 let ana: Client;
 let bruno: Client;
 let ids: { ana: string; bruno: string };
-/** Números: 1 conectado, 2 desconectado. */
+/** Números da Ana: 1 conectado, 2 desconectado. Número 3: do Bruno. */
 let n1: number;
 let n2: number;
+let n3: number;
 /** Leads na fila da Ana. */
 let lead1: number;
 let lead2: number;
@@ -65,9 +66,12 @@ beforeAll(async () => {
 
   await hook('connection.update', { state: 'open', wuid: '5511900000000@s.whatsapp.net' });
   await hook('connection.update', { state: 'close' }, 'whatsapp-02');
+  await hook('connection.update', { state: 'open' }, 'whatsapp-03');
   fake.closed.add('whatsapp-02');
   const instances = await t.db.selectFrom('wa_instances').select(['id', 'name']).orderBy('name').execute();
-  [n1, n2] = instances.map((i) => i.id) as [number, number];
+  [n1, n2, n3] = instances.map((i) => i.id) as [number, number, number];
+  await t.db.updateTable('wa_instances').set({ owner_id: a.id }).where('id', 'in', [n1, n2]).execute();
+  await t.db.updateTable('wa_instances').set({ owner_id: b.id }).where('id', '=', n3).execute();
 
   [lead1, lead2, lead3] = (await seedList(t.db, { count: 3, assignTo: a.id, phoneStart: 100 })).leadIds as [
     number,
@@ -195,8 +199,18 @@ describe('botão "Chamar" pelo sistema', () => {
   });
 
   it('atendente não chama nem vê as conversas de um lead de outra pessoa', async () => {
-    expect((await open(bruno, lead2)).statusCode).toBe(404);
+    expect((await open(bruno, lead2, n3)).statusCode).toBe(404);
     expect((await bruno.get(`/api/leads/${lead2}/conversations`)).statusCode).toBe(404);
+  });
+
+  it('atendente só chama pelos números dele', async () => {
+    const [brunoLead] = (await seedList(t.db, { count: 1, assignTo: ids.bruno, phoneStart: 400 }))
+      .leadIds as [number];
+    const r = await open(bruno, brunoLead, n1);
+    expect(r.statusCode).toBe(404);
+    expect(r.json().error).toBe('Número não encontrado.');
+    // O dono chama por qualquer número.
+    expect((await open(dono, brunoLead, n3)).statusCode).toBe(200);
   });
 
   it('mensagem de outra pessoa na conversa não tira o lead da fila de quem pegou', async () => {
@@ -221,7 +235,7 @@ describe('botão "Chamar" pelo sistema', () => {
     await t.db.updateTable('settings').set({ hourly_contact_warning: 3 }).execute();
     const { leadIds } = await seedList(t.db, { count: 3, assignTo: ids.bruno, phoneStart: 300 });
     const results = [];
-    for (const id of leadIds) results.push((await open(bruno, id)).json() as LeadChatResult);
+    for (const id of leadIds) results.push((await open(bruno, id, n3)).json() as LeadChatResult);
     expect(results[0]?.warning).toBeNull();
     expect(results[2]?.warning).toMatch(/3 conversas na última hora/);
   });

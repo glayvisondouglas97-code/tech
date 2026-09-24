@@ -13,8 +13,16 @@ test('fila do atendente no celular', async ({ page }) => {
   await page.locator('li.lead').first().getByRole('button', { name: 'Chamar no WhatsApp' }).click();
   await expect(page.getByRole('dialog', { name: 'Chamar pelo WhatsApp' })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
-  // A barra de atalhos de baixo aparece no celular.
-  await expect(page.getByRole('navigation', { name: 'Atalhos' })).toBeVisible();
+  // A barra de atalhos de baixo aparece no celular e fica fixa: a página não rola, só o conteúdo.
+  const tabbar = page.getByRole('navigation', { name: 'Atalhos' });
+  await expect(tabbar).toBeVisible();
+  const before = await tabbar.boundingBox();
+  await page.locator('.app-main').evaluate((el) => el.scrollBy(0, 600));
+  await page.mouse.wheel(0, 600);
+  expect(await page.locator('.app-main').evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0)).toBe(0);
+  expect(await tabbar.boundingBox()).toEqual(before);
+  await page.locator('.app-main').evaluate((el) => el.scrollTo(0, 0));
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   await page.screenshot({ path: resolve('test-results/telas/09-celular.png'), fullPage: false });

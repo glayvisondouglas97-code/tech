@@ -69,7 +69,7 @@ export async function handleEvolutionEvent(
     case 'qrcode.updated': {
       // Novo QR Code para a tela de números. Sem base64 = limite de QR Codes atingido (expirou).
       const instance = await enqueue(() => upsertInstance(db, instanceName));
-      publishQrCode(instance.id, typeof data?.qrcode?.base64 === 'string' ? data.qrcode.base64 : null);
+      await publishQrCode(instance.id, typeof data?.qrcode?.base64 === 'string' ? data.qrcode.base64 : null);
       return;
     }
     default:

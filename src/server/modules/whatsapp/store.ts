@@ -28,7 +28,7 @@ export interface SavedMessage {
 
 /** O que mudou ao juntar contatos duplicados (telefone ↔ @lid), para avisar os navegadores depois de gravar. */
 interface MergeChanges {
-  removed: { id: number; mergedInto: number }[];
+  removed: { id: number; mergedInto: number; instanceId: number }[];
   touched: Set<number>;
 }
 
@@ -67,7 +67,7 @@ export async function upsertInstance(
         .values({ name, status: data.status ?? 'close', phone_jid: phoneJid ?? null })
         .returningAll()
         .executeTakeFirstOrThrow();
-  publishInstance(instance);
+  await publishInstance(instance.id);
   return instance;
 }
 
@@ -186,17 +186,14 @@ async function publishSaveResult(
   saved: SavedMessage | null,
   statusUpdated: WaMessage | null,
 ) {
-  try {
-    for (const { id, mergedInto } of changes.removed) publishConversationRemoved(id, mergedInto);
-    if (statusUpdated) publishMessage('message:updated', statusUpdated);
-    if (saved) {
-      publishMessage('message:new', saved.message);
-      changes.touched.add(saved.conversation.id);
-    }
-    for (const id of changes.touched) await publishConversation(id);
-  } catch (error) {
-    console.error('[tempo real] falha ao avisar os navegadores:', error);
+  for (const { id, mergedInto, instanceId } of changes.removed)
+    await publishConversationRemoved(id, mergedInto, instanceId);
+  if (statusUpdated) await publishMessage('message:updated', statusUpdated);
+  if (saved) {
+    await publishMessage('message:new', saved.message);
+    changes.touched.add(saved.conversation.id);
   }
+  for (const id of changes.touched) await publishConversation(id);
 }
 
 /**
@@ -341,7 +338,11 @@ async function mergeContact(tx: Tx, keep: WaContact, other: WaContact, changes: 
       .where('id', '=', target.id)
       .execute();
     await tx.deleteFrom('wa_conversations').where('id', '=', conversation.id).execute();
-    changes.removed.push({ id: conversation.id, mergedInto: target.id });
+    changes.removed.push({
+      id: conversation.id,
+      mergedInto: target.id,
+      instanceId: conversation.instance_id,
+    });
     changes.touched.delete(conversation.id);
     changes.touched.add(target.id);
   }
@@ -369,6 +370,6 @@ export async function updateMessageStatus(
     .where('id', '=', message.id)
     .returningAll()
     .executeTakeFirstOrThrow();
-  publishMessage('message:updated', updated);
+  await publishMessage('message:updated', updated);
   return updated;
 }

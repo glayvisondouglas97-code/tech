@@ -165,12 +165,10 @@ function ChooseNumberDialog({ lead, onClose }: { lead: LeadItem; onClose: () => 
             </div>
           ) : list.length === 0 ? (
             <p className="banner">
-              Nenhum número de WhatsApp cadastrado.{' '}
-              {can('manageNumbers') ? (
-                <Link to="/numeros">Conectar em Números</Link>
-              ) : (
-                'Peça ao administrador.'
-              )}
+              {can('seeAllNumbers')
+                ? 'Nenhum número de WhatsApp cadastrado.'
+                : 'Você ainda não tem número de WhatsApp.'}{' '}
+              <Link to="/numeros">Cadastrar em Números</Link>
             </p>
           ) : (
             <ul className="num-pick">
@@ -212,12 +210,7 @@ function ChooseNumberDialog({ lead, onClose }: { lead: LeadItem; onClose: () => 
           )}
           {instances && list.length > 0 && connected.length === 0 && (
             <p className="banner">
-              Nenhum número conectado agora.{' '}
-              {can('manageNumbers') ? (
-                <Link to="/numeros">Reconectar em Números</Link>
-              ) : (
-                'Peça ao administrador.'
-              )}
+              Nenhum número conectado agora. <Link to="/numeros">Reconectar em Números</Link>
             </p>
           )}
           {error && (

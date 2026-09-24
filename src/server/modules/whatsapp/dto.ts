@@ -14,8 +14,24 @@ const iso = (d: Date | string) => (d instanceof Date ? d.toISOString() : new Dat
 /** Nome do lead como aparece no Chamador: a empresa ou, sem empresa, o sócio. */
 const leadLabel = (company: string | null, name: string | null) => company || name || 'Lead sem nome';
 
-export function instanceDto(i: WaInstance): InstanceInfo {
-  return { id: i.id, name: i.name, nickname: i.nickname, phone: phoneOf(i.phone_jid), status: i.status };
+/** Números com o nome do responsável. */
+export function instancesQuery(db: Kysely<Database>) {
+  return db
+    .selectFrom('wa_instances as i')
+    .leftJoin('users as u', 'u.id', 'i.owner_id')
+    .selectAll('i')
+    .select('u.name as owner_name');
+}
+
+export function instanceDto(i: WaInstance & { owner_name?: string | null }): InstanceInfo {
+  return {
+    id: i.id,
+    name: i.name,
+    nickname: i.nickname,
+    phone: phoneOf(i.phone_jid),
+    status: i.status,
+    owner: i.owner_id ? { id: i.owner_id, name: i.owner_name ?? 'Usuário removido' } : null,
+  };
 }
 
 /** Conversa com o contato e o número (usada na lista, no chat e no tempo real). */
@@ -39,6 +55,7 @@ export function conversationsQuery(db: Kysely<Database>) {
       'i.name as instance_name',
       'i.nickname as instance_nickname',
       'i.status as instance_status',
+      'i.owner_id as instance_owner_id',
       'c.lead_id',
       'l.company as lead_company',
       'l.name as lead_name',

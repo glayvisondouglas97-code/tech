@@ -148,7 +148,7 @@ async function scrubRawCopies(trx: Db, phone: string): Promise<string[]> {
 
 async function afterScrub(mediaPaths: string[]): Promise<void> {
   await removeMediaFiles(mediaPaths);
-  publishReload();
+  await publishReload();
 }
 
 /**

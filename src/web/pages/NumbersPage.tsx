@@ -1,12 +1,14 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type CSSProperties, useState } from 'react';
+import type { TeamMember } from '../../shared/api';
 import type { InstanceInfo } from '../../shared/conversations';
 import { IconPencil, IconPlus, IconQr, IconSmartphone, IconX } from '../components/Icons';
 import { useToast } from '../components/Toasts';
 import { Dialog, Empty } from '../components/ui';
 import { QrDialog } from '../components/wa/QrDialog';
-import { errorMessage } from '../lib/api';
+import { api, errorMessage } from '../lib/api';
 import { plural } from '../lib/format';
+import { useSession } from '../lib/session';
 import {
   formatPhone,
   instanceColor,
@@ -17,10 +19,21 @@ import {
   wa,
 } from '../lib/whatsapp';
 
-/** Números de WhatsApp da equipe: adicionar, conectar pelo QR Code, reconectar e trocar o apelido. */
+/**
+ * Números de WhatsApp: cada pessoa cadastra e conecta os próprios números (e só ela, e a gestão, vê as
+ * conversas deles). Dono e administrador cuidam de todos e escolhem o responsável de cada número.
+ */
 export function NumbersPage() {
   const qc = useQueryClient();
+  const { can } = useSession();
+  const seeAll = can('seeAllNumbers');
   const instances = useWaInstances();
+  const team = useQuery({
+    queryKey: ['team'],
+    queryFn: () => api<TeamMember[]>('/team'),
+    enabled: can('manageNumbers'),
+    staleTime: 60_000,
+  });
   const list = instances.data ?? [];
   const [connectingId, setConnectingId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
@@ -40,7 +53,11 @@ export function NumbersPage() {
       <div className="page-head">
         <div>
           <h1>Números</h1>
-          <p className="sub">Os WhatsApps da equipe conectados ao sistema.</p>
+          <p className="sub">
+            {seeAll
+              ? 'Os WhatsApps da equipe. Cada atendente vê só as conversas dos números de que é responsável.'
+              : 'Os seus números de WhatsApp. Só você e a gestão veem as conversas deles.'}
+          </p>
         </div>
         {list.length > 0 && (
           <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
@@ -66,8 +83,11 @@ export function NumbersPage() {
         </div>
       ) : list.length === 0 ? (
         <section className="panel mt16">
-          <Empty title="Nenhum número ainda" icon={<IconSmartphone />}>
-            <p>Adicione o primeiro número e escaneie o QR Code com o celular dele.</p>
+          <Empty
+            title={seeAll ? 'Nenhum número ainda' : 'Você ainda não tem número'}
+            icon={<IconSmartphone />}
+          >
+            <p>Adicione o número e escaneie o QR Code com o celular dele.</p>
             <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
               <IconPlus /> Adicionar número
             </button>
@@ -79,6 +99,7 @@ export function NumbersPage() {
             <NumberCard
               key={instance.id}
               instance={instance}
+              team={team.data}
               onSaved={save}
               onConnect={() => setConnectingId(instance.id)}
             />
@@ -107,18 +128,43 @@ export function NumbersPage() {
 
 function NumberCard({
   instance,
+  team,
   onSaved,
   onConnect,
 }: {
   instance: InstanceInfo;
+  /** Equipe ativa, para o dono e o administrador escolherem o responsável. */
+  team: TeamMember[] | undefined;
   onSaved: (instance: InstanceInfo) => void;
   onConnect: () => void;
 }) {
   const toast = useToast();
+  const { me, can } = useSession();
   const [editing, setEditing] = useState(false);
   const [nickname, setNickname] = useState('');
   const [saving, setSaving] = useState(false);
   const status = statusInfo(instance.status);
+  const manageAll = can('manageNumbers');
+  const canManage = manageAll || instance.owner?.id === me?.id;
+  // Responsável desativado não aparece na equipe: continua na lista para não sumir da seleção.
+  const people =
+    instance.owner && team && !team.some((p) => p.id === instance.owner?.id)
+      ? [...team, { id: instance.owner.id, name: instance.owner.name, role: 'atendente' as const }]
+      : (team ?? []);
+
+  const changeOwner = async (ownerId: string | null) => {
+    try {
+      const updated = await wa.setInstanceOwner(instance.id, ownerId);
+      onSaved(updated);
+      toast(
+        updated.owner
+          ? `Agora ${updated.owner.name} é responsável por ${instanceLabel(updated)}.`
+          : `${instanceLabel(updated)} ficou sem responsável.`,
+      );
+    } catch (e) {
+      toast(errorMessage(e), { tone: 'bad' });
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -142,7 +188,7 @@ function NumberCard({
         <div className="wa-num-info">
           <div className="wa-num-title">
             <b>{instanceLabel(instance)}</b>
-            {!editing && (
+            {!editing && canManage && (
               <button
                 type="button"
                 className="icon-btn"
@@ -163,6 +209,29 @@ function NumberCard({
           <span className="sub small">Identificação: {instance.name}</span>
         </div>
       </div>
+
+      {manageAll ? (
+        <label className="wa-num-owner">
+          <span>Responsável</span>
+          <select
+            className="select"
+            value={instance.owner?.id ?? ''}
+            onChange={(e) => void changeOwner(e.target.value || null)}
+          >
+            <option value="">Sem responsável (só a gestão vê)</option>
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="wa-num-owner">
+          <span>Responsável</span>
+          <b>{instance.owner?.id === me?.id ? 'Você' : (instance.owner?.name ?? 'Sem responsável')}</b>
+        </p>
+      )}
 
       {editing && (
         <form
@@ -196,9 +265,13 @@ function NumberCard({
       <div className="wa-num-foot">
         <span className={`tag ${status.tone}`}>{status.label}</span>
         {instance.status !== 'open' ? (
-          <button type="button" className="btn btn-primary btn-sm" onClick={onConnect}>
-            <IconQr size={16} /> {instance.phone ? 'Reconectar' : 'Conectar'}
-          </button>
+          canManage ? (
+            <button type="button" className="btn btn-primary btn-sm" onClick={onConnect}>
+              <IconQr size={16} /> {instance.phone ? 'Reconectar' : 'Conectar'}
+            </button>
+          ) : (
+            <span className="sub small">Só o responsável ou um administrador reconecta</span>
+          )
         ) : (
           <span className="sub small">Recebendo mensagens</span>
         )}

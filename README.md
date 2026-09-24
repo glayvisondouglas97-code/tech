@@ -23,12 +23,14 @@ Para colocar no VPS (domínio + HTTPS), siga [`docs/DEPLOY.md`](docs/DEPLOY.md).
 | Papel | O que faz |
 |---|---|
 | Dono | Acesso master: tudo o que o administrador faz, e também criar/promover administradores, excluir listas e usar a LGPD. As ações do dono não aparecem para os administradores. |
-| Administrador | Equipe (supervisores e atendentes), configurações, listas, **números de WhatsApp** e Auditoria. Não mexe em administradores nem no dono. |
-| Supervisor | Vê a equipe toda, importa listas, redistribui e exporta. Não mexe em configurações, usuários nem números. |
-| Atendente | Trabalha só nos leads dele. Não vê os leads dos colegas nem as telas de gestão. |
+| Administrador | Equipe (supervisores e atendentes), configurações, listas, **todos os números de WhatsApp** (inclusive escolher o responsável de cada um) e Auditoria. Não mexe em administradores nem no dono. |
+| Supervisor | Vê a equipe toda e **todas as conversas**, importa listas, redistribui e exporta. Não mexe em configurações, usuários nem nos números dos outros. |
+| Atendente | Trabalha só nos leads dele e **só vê as conversas dos números de WhatsApp de que é responsável**. Não vê os leads dos colegas nem as telas de gestão. |
 
-Todos os papéis veem e respondem **todas as conversas** de todos os números. Só dono e administrador conectam,
-reconectam e renomeiam números.
+**Números de WhatsApp:** qualquer pessoa cadastra e conecta os próprios números em **Números** e fica como responsável
+por eles. Dono, administrador e supervisor veem as conversas de todos os números; o atendente, só as dos números dele
+(pela tela e também pelo tempo real). Dono e administrador conectam, renomeiam e trocam o responsável de qualquer
+número; o supervisor vê, mas só mexe nos próprios.
 
 ## Serviços (Docker)
 
@@ -121,9 +123,12 @@ a ser dono.
 ### 6. Conectar os números
 
 1. No menu, clique em **Números** → **Adicionar número**, digite um apelido (ex.: `WhatsApp 3 - João`) e clique em
-   **Criar e conectar**.
+   **Criar e conectar**. Cada atendente pode fazer isso com o próprio número.
 2. O QR Code aparece na tela. No celular desse número, abra o WhatsApp → **Dispositivos conectados** →
    **Conectar dispositivo** e escaneie. Ao conectar, a janela mostra "Conectado!" e fecha sozinha.
+3. Quem cadastra fica como **responsável** pelo número. O dono e o administrador trocam o responsável no cartão do número
+   (campo **Responsável**): é assim que um número cadastrado pela gestão passa a aparecer para um atendente. Número
+   **sem responsável** só aparece para dono, administrador e supervisor.
 
 O sistema cria o número na Evolution já com o webhook, "ignorar grupos" ligado e "marcar como lida automaticamente"
 desligado. O histórico dos últimos 14 dias é importado sozinho logo depois da conexão.
@@ -171,6 +176,8 @@ Uma conversa aberta pelo **Chamar** só aparece na lista de conversas depois da 
 
 ### Conversas (WhatsApp)
 
+- **Quem vê o quê:** o atendente vê só as conversas dos números de que é responsável; dono, administrador e supervisor
+  veem todas.
 - **Lista:** a aba **Responderam** mostra só os leads que responderam; **Todas** mostra tudo. A busca procura pelo nome,
   pela empresa do lead ou por parte do telefone. A conversa de um lead chamado pelo sistema aparece com o nome da
   empresa. Os botões com o nome de cada número mostram só as conversas daquele WhatsApp. Cada conversa
@@ -192,7 +199,8 @@ Uma conversa aberta pelo **Chamar** só aparece na lista de conversas depois da 
 ### No celular
 
 A tela se adapta ao celular: barra de atalhos embaixo (**A chamar**, **Conversas**, **Chamados**, **Painel** e
-**Menu**), a conversa abre em tela cheia e o botão **voltar** do celular volta para a lista. No celular, **Enter** quebra
+**Menu**), sempre fixa (só o conteúdo rola; ela só some dentro de uma conversa do WhatsApp). A conversa abre em tela
+cheia e o botão **voltar** do celular volta para a lista. No celular, **Enter** quebra
 a linha e a seta verde envia.
 
 Use o endereço do VPS (com `https://`), porque o microfone só funciona em site seguro. Para usar como aplicativo:
@@ -259,11 +267,11 @@ equipe e relatórios estão em `src/server/routes`.
 |---|---|
 | `POST /api/leads/ID/conversation` | "Chamar": confere se o lead tem WhatsApp e abre a conversa pelo número escolhido (`{"instanceId": 1}`) |
 | `GET /api/leads/ID/conversations` | Conversas já abertas com o lead (por qual número) |
-| `GET /api/instances` | Lista os números e o status de cada um |
-| `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções (dono/administrador) |
-| `PATCH /api/instances/ID` | Troca o apelido de um número (dono/administrador) |
-| `POST /api/instances/ID/connect` | Conecta/reconecta um número; o QR Code chega em tempo real (dono/administrador) |
-| `POST /api/instances/ID/import-history` | Reimporta o histórico dos últimos 14 dias de um número (dono/administrador) |
+| `GET /api/instances` | Lista os números que a pessoa vê (atendente: só os dele), com status e responsável |
+| `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções; quem cria fica como responsável |
+| `PATCH /api/instances/ID` | Troca o apelido (responsável ou dono/administrador) e o responsável (`{"ownerId": "..."}`, só dono/administrador) |
+| `POST /api/instances/ID/connect` | Conecta/reconecta um número; o QR Code chega em tempo real (responsável ou dono/administrador) |
+| `POST /api/instances/ID/import-history` | Reimporta o histórico dos últimos 14 dias de um número (responsável ou dono/administrador) |
 | `GET /api/conversations?tab=responderam` | Conversas em que o lead respondeu (também `tab=todas`, `&instanceId=1` e `&q=maria`) |
 | `GET /api/conversations/stats` | Totais do menu: conversas com não lidas e números desconectados |
 | `GET /api/conversations/ID` · `GET /api/conversations/ID/messages` | Uma conversa e as mensagens dela |

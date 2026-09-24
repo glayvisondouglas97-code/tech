@@ -42,6 +42,8 @@ export const wa = {
   createInstance: (nickname: string) => api<InstanceInfo>('/instances', { body: { nickname } }),
   renameInstance: (id: number, nickname: string) =>
     api<InstanceInfo>(`/instances/${id}`, { method: 'PATCH', body: { nickname } }),
+  setInstanceOwner: (id: number, ownerId: string | null) =>
+    api<InstanceInfo>(`/instances/${id}`, { method: 'PATCH', body: { ownerId } }),
   connectInstance: (id: number) =>
     api<{ status: 'open' | 'connecting'; qrcode: string | null }>(`/instances/${id}/connect`, { body: {} }),
 
@@ -198,9 +200,18 @@ export function useWaCacheSync(enabled: boolean) {
     );
     refreshStats();
   });
+  // Número que deixou de ser da pessoa (o administrador trocou o responsável): sai da lista.
+  useSocketEvent<{ id: number }>('instance:removed', ({ id }) => {
+    qc.setQueryData<InstanceInfo[]>(WA_INSTANCES, (prev) => prev?.filter((i) => i.id !== id));
+    refreshStats();
+  });
   useSocketEvent('conversation:updated', refreshStats);
   useSocketEvent('conversation:removed', refreshStats);
-  useSocketEvent('conversations:reload', refreshStats);
+  useSocketEvent('conversations:reload', () => {
+    // Recarga geral (troca de responsável ou de papel): os números visíveis podem ter mudado.
+    if (enabled) void qc.invalidateQueries({ queryKey: WA_INSTANCES });
+    refreshStats();
+  });
   useReconnect(() => {
     if (!enabled) return;
     void qc.invalidateQueries({ queryKey: WA_INSTANCES });
