@@ -1,24 +1,47 @@
-# Central de WhatsApp
+# Chamador de Leads + Central de WhatsApp
 
-Sistema web próprio que junta, num só lugar, as conversas de vários números de WhatsApp conectados pela
-[Evolution API](https://github.com/evolution-foundation/evolution-api) (versão fixa **v2.3.7**).
+Um sistema só para a equipe que chama leads pelo WhatsApp:
 
-O plano completo e as decisões estão em [`docs/PLANO.md`](docs/PLANO.md). Para colocar no VPS (domínio + HTTPS), siga
-[`docs/DEPLOY.md`](docs/DEPLOY.md).
+- o **gestor** importa as listas de leads (Excel ou CSV), cadastra a equipe e acompanha tudo pelo **Painel** e pela
+  **Auditoria**;
+- cada **atendente** entra com o próprio login, pega leads da fila, chama e marca o resultado (mensagem enviada,
+  respondeu, sem WhatsApp…), com observações e retornos agendados;
+- as conversas de **todos os números de WhatsApp** conectados ficam num lugar só (**Conversas**), com texto, áudio
+  gravado na hora, imagens e documentos. Os números são conectados pela
+  [Evolution API](https://github.com/evolution-foundation/evolution-api) (versão fixa **v2.3.7**), na tela **Números**.
 
-## Serviços
+Tudo fica registrado: quem pegou, quem chamou, quando, com qual resultado, quem enviou cada mensagem e todo o histórico
+de cada lead. Os leads são **empresas (pessoa jurídica)**: aparece o nome da empresa em destaque e o sócio/proprietário
+embaixo.
+
+Para colocar no VPS (domínio + HTTPS), siga [`docs/DEPLOY.md`](docs/DEPLOY.md). O plano e as decisões estão em
+[`docs/PLANO.md`](docs/PLANO.md) e [`docs/DECISOES.md`](docs/DECISOES.md).
+
+## Papéis
+
+| Papel | O que faz |
+|---|---|
+| Dono | Acesso master: tudo o que o administrador faz, e também criar/promover administradores, excluir listas e usar a LGPD. As ações do dono não aparecem para os administradores. |
+| Administrador | Equipe (supervisores e atendentes), configurações, listas, **números de WhatsApp** e Auditoria. Não mexe em administradores nem no dono. |
+| Supervisor | Vê a equipe toda, importa listas, redistribui e exporta. Não mexe em configurações, usuários nem números. |
+| Atendente | Trabalha só nos leads dele. Não vê os leads dos colegas nem as telas de gestão. |
+
+Todos os papéis veem e respondem **todas as conversas** de todos os números. Só dono e administrador conectam,
+reconectam e renomeiam números.
+
+## Serviços (Docker)
 
 | Serviço | Para quê |
 |---|---|
+| `app` | O sistema: o site e o backend (leads, equipe, conversas). Recebe os webhooks da Evolution e envia as mensagens |
 | `evolution` | Conecta os números de WhatsApp (1 instância por número) |
-| `postgres` | Banco `evolution` (usado pela Evolution) e banco `central` (usado pelo nosso sistema) |
+| `postgres` | Banco `central` (o nosso sistema) e banco `evolution` (usado pela Evolution) |
 | `redis` | Cache da Evolution |
-| `app` | Nosso sistema: o site (tela de conversas) e o backend, que recebe os webhooks, grava as conversas e envia as respostas |
 | `backup` | Todo dia às 3h copia os dois bancos e as mídias para a pasta `backups` |
 | `caddy` | Só no VPS: HTTPS automático no seu domínio (arquivo `docker-compose.prod.yml`) |
 
-A Evolution (`127.0.0.1:8080`) e o backend (`127.0.0.1:3100`) só ficam acessíveis no próprio computador,
-nunca pela rede. O sistema exige login.
+A Evolution (`127.0.0.1:8080`) e o sistema (`127.0.0.1:3100`) só ficam acessíveis no próprio computador, nunca pela
+rede. A chave da Evolution fica só no backend, e o webhook só é aceito com o token secreto.
 
 ## Como rodar no Windows
 
@@ -59,7 +82,7 @@ Os três últimos comandos geram três senhas aleatórias. Abra o arquivo com `n
 docker compose up -d --build
 ```
 
-Na primeira vez ele baixa as imagens e monta o backend, o que leva alguns minutos. Para acompanhar:
+Na primeira vez ele baixa as imagens e monta o sistema, o que leva alguns minutos. Para acompanhar:
 
 ```powershell
 docker compose logs -f app
@@ -67,101 +90,116 @@ docker compose logs -f app
 
 Aperte `Ctrl + C` para sair dos logs. Os serviços continuam rodando.
 
-### 4. Criar o primeiro acesso (só na primeira vez)
+### 4. Criar o dono (só na primeira vez)
 
-Crie o seu usuário de administrador (troque o nome e o e-mail):
+Troque o nome e o e-mail:
 
 ```powershell
-docker compose exec app node src/cli.ts criar-admin "Seu Nome" voce@email.com
+docker compose exec app node dist/server/criar-admin.js --nome "Seu Nome" --email voce@email.com
 ```
 
-O comando mostra uma **senha provisória**. Abra **<http://localhost:3100>**, entre com o e-mail e essa senha e troque-a
-em **Minha senha** (clique no círculo com as suas iniciais, no canto de baixo à esquerda). Depois, cadastre a equipe
-em **Usuários** (ver "Equipe" abaixo).
+O comando mostra a **senha** uma vez só (para escolher a senha, acrescente `--senha "uma senha forte"`). Abra
+**<http://localhost:3100>**, entre com o e-mail e essa senha e troque-a em **Minha conta e senha** (clique no círculo
+com as suas iniciais, no canto de cima à direita).
 
-### 5. Conectar os números
+O mesmo comando serve para **recuperar o acesso**: com um e-mail que já existe, ele gera uma senha nova e a pessoa volta
+a ser dono.
 
-1. Abra **<http://localhost:3100>** e clique em **Números**, no menu da esquerda.
-2. Clique em **Adicionar número**, digite um apelido (ex.: `WhatsApp 3 - João`) e clique em **Criar e conectar**.
-3. O QR Code aparece na tela. No celular desse número, abra o WhatsApp → **Dispositivos conectados** →
+### 5. Cadastrar a equipe (Usuários)
+
+1. **Usuários** → **Novo usuário** → nome, e-mail (é o login) e o papel. O administrador só cria supervisores e
+   atendentes; só o dono cria administradores e outros donos.
+2. Escolha como a pessoa vai entrar:
+   - **Definir a senha agora:** você digita a senha (ou clica em **Gerar**) e passa para a pessoa com **Copiar dados
+     de acesso** ou **Enviar pelo WhatsApp**.
+   - **Enviar link de convite:** a pessoa recebe um link (vale 7 dias, uma vez só) e cria a própria senha.
+3. Em cada pessoa: **Editar** (nome, e-mail, papel, limite de leads por dia) e, no menu **…**: **Definir nova senha**
+   (a sessão dela cai na hora), link para ela mesma trocar a senha, devolver os leads dela à fila livre e
+   **Desativar/Reativar acesso**.
+
+### 6. Conectar os números
+
+1. No menu, clique em **Números** → **Adicionar número**, digite um apelido (ex.: `WhatsApp 3 - João`) e clique em
+   **Criar e conectar**.
+2. O QR Code aparece na tela. No celular desse número, abra o WhatsApp → **Dispositivos conectados** →
    **Conectar dispositivo** e escaneie. Ao conectar, a janela mostra "Conectado!" e fecha sozinha.
 
 O sistema cria o número na Evolution já com o webhook, "ignorar grupos" ligado e "marcar como lida automaticamente"
 desligado. O histórico dos últimos 14 dias é importado sozinho logo depois da conexão.
 
-**Número caiu?** O ícone **Números** do menu ganha um selo vermelho com a quantidade de números desconectados. Na tela
-de números, clique em **Reconectar** no cartão dele: se a sessão ainda valer, ele volta sozinho; se não, aparece um QR
-Code novo. O apelido se troca no lápis ao lado do nome.
+**Número caiu?** O item **Números** do menu ganha um selo vermelho com a quantidade de números desconectados. Na tela de
+números, clique em **Reconectar** no cartão dele: se a sessão ainda valer, ele volta sozinho; se não, aparece um QR Code
+novo. O apelido se troca no lápis ao lado do nome.
 
-> O painel da Evolution (<http://localhost:8080/manager>) continua disponível para emergências, mas não é mais
-> necessário. Não altere nele as opções de webhook dos números.
+> O painel da Evolution (<http://localhost:8080/manager>) continua disponível para emergências, mas não é necessário.
+> Não altere nele as opções de webhook dos números.
 
-## Usar o sistema
+## Uso no dia a dia
 
-Abra **<http://localhost:3100>** no navegador.
+- **Listas › Importar:** arraste o Excel/CSV. O sistema acha as colunas da empresa, do sócio e do telefone (dá para
+  trocar cada uma), mostra o total de empresas e de telefones, quantos entram, quantos são repetidos e quantos são
+  inválidos, e só grava quando você confirma. Depois dá para baixar as linhas recusadas com o motivo.
+- **A chamar:** escolha quantos leads pegar e de qual DDD › **Pegar leads** (cada atendente tem um limite por dia),
+  filtre a sua fila por DDD, **Chamar no WhatsApp**, "Marcar como chamado" ou "Sem WhatsApp". O **Modo foco** mostra
+  um lead por vez, com atalhos de teclado. Por enquanto o botão ainda abre o aplicativo do WhatsApp com a mensagem
+  pronta; na próxima fase ele passa a abrir a conversa aqui dentro, pelo número que você escolher.
+- **Conversas:** todas as conversas de todos os números, da mais recente para a mais antiga (detalhes abaixo).
+- **Já chamados:** empresa, sócio, quem chamou, quando e o resultado (mensagem enviada, respondeu, não respondeu, sem
+  conta no banco, não é correntista…); dá para mudar o resultado, anotar, agendar retorno e reabrir.
+- **Painel:** números por atendente (hoje, 7 e 30 dias, conversão) e andamento de cada lista (empresas, telefones e
+  quanto falta pegar); exporta CSV/Excel.
+- **Auditoria:** tudo o que cada pessoa fez, com filtro por pessoa e tipo: pedidos de leads, qual lead foi para quem,
+  quantos cada um puxou e chamou por dia, números criados/renomeados/conectados e tentativas de acesso sem permissão.
+  Baixa em planilha.
+- **Configurações:** mensagens prontas, regras da fila (quantos leads por clique, limite na fila, limite por dia, devolução automática
+  de leads parados), nome/logo da empresa, lista de "não contatar" e LGPD (só o dono).
 
-- **Menu da esquerda**: **Conversas** (com o total de conversas não lidas), **Números** (com o total de desconectados)
-  e **Usuários** (só administradores). Embaixo, o círculo com as suas iniciais abre **Minha senha** e **Sair**.
-- **Lista de conversas**: todas as conversas de todos os números, da mais recente para a mais antiga. A aba
-  **Responderam** mostra só os leads que responderam; a aba **Todas** mostra tudo. A busca procura pelo nome ou por
-  parte do telefone. Os botões com o nome de cada número mostram só as conversas daquele WhatsApp. Cada conversa tem
-  a bolinha colorida do número por onde ela acontece e o contador de não lidas.
-- **Chat**: **Enter** envia e **Shift + Enter** quebra a linha. No alto aparece por qual número a resposta sai (sempre
-  o mesmo da conversa). Mensagens seguidas ficam agrupadas, e o dia fica fixo no alto enquanto você rola.
-- Abrir a conversa zera as não lidas **no sistema**. O tique azul só vai para o lead quando alguém responde. O total
-  de não lidas também aparece no título da aba do navegador, por exemplo `(3) Central WhatsApp`.
-- Mensagens novas, status (entregue/lida) e contadores aparecem na hora, em todas as telas abertas. Se você estiver
-  lendo mensagens antigas, um botão com seta mostra quantas chegaram e leva ao fim do chat. Se a conexão cair, aparece
-  um aviso amarelo; quando ela volta, a tela busca sozinha o que chegou nesse meio tempo.
-- **Áudio**: com a caixa de texto vazia, clique no **microfone** para gravar. Aparece o tempo da gravação; clique na
-  **seta verde** para enviar (ou na **lixeira** para descartar). O áudio chega no WhatsApp do lead como **mensagem de
-  voz**. Na primeira vez, o navegador pede permissão para usar o microfone.
-- **Imagem ou documento**: clique no **clipe**, escolha o arquivo (até 25 MB), escreva uma legenda se quiser e envie.
+### Conversas (WhatsApp)
+
+- **Lista:** a aba **Responderam** mostra só os leads que responderam; **Todas** mostra tudo. A busca procura pelo nome
+  ou por parte do telefone. Os botões com o nome de cada número mostram só as conversas daquele WhatsApp. Cada conversa
+  tem a bolinha colorida do número e o contador de não lidas. O item **Conversas** do menu mostra o total de conversas
+  não lidas, que também aparece no título da aba do navegador, por exemplo `(3) Chamador de Leads`.
+- **Chat:** **Enter** envia e **Shift + Enter** quebra a linha. No alto aparece por qual número a resposta sai (sempre o
+  mesmo da conversa). Cada mensagem enviada pelo sistema guarda quem da equipe enviou.
+- Abrir a conversa zera as não lidas **no sistema**. O tique azul só vai para o lead quando alguém responde.
+- Mensagens novas, status (entregue/lida) e contadores aparecem na hora, em todas as telas abertas. Se a conexão cair,
+  aparece um aviso; quando ela volta, a tela busca sozinha o que chegou nesse meio tempo.
+- **Áudio:** com a caixa de texto vazia, clique no **microfone** para gravar; clique na **seta verde** para enviar (ou na
+  **lixeira** para descartar). O áudio chega no WhatsApp do lead como **mensagem de voz**. Na primeira vez, o navegador
+  pede permissão para usar o microfone.
+- **Imagem ou documento:** clique no **clipe**, escolha o arquivo (até 25 MB), escreva uma legenda se quiser e envie.
   JPG, PNG e WebP vão como imagem; qualquer outro arquivo (PDF, planilha etc.) vai como documento.
-- **Mídias recebidas**: áudios têm player com velocidade (1×, 1,5×, 2×); imagens aparecem no chat (clique para ver em
-  tela cheia) e documentos têm o botão de baixar. As mídias ficam guardadas no volume `media_data` do Docker (não no
-  banco).
-- **Modo escuro**: a tela segue o tema do computador ou do celular (claro ou escuro) sozinha.
+- **Mídias recebidas:** áudios têm player com velocidade (1×, 1,5×, 2×); imagens abrem em tela cheia e documentos têm o
+  botão de baixar. Os arquivos ficam no volume `midias` do Docker (não no banco).
 
 ### No celular
 
-A tela se adapta ao celular: a lista ocupa a tela inteira, a conversa abre em tela cheia e o botão **voltar** do
-celular volta para a lista. O menu fica numa barra embaixo (**Conversas**, **Números**, **Usuários** e **Conta**). No
-celular, **Enter** quebra a linha e a seta verde envia.
+A tela se adapta ao celular: barra de atalhos embaixo (**A chamar**, **Conversas**, **Chamados**, **Painel** e
+**Menu**), a conversa abre em tela cheia e o botão **voltar** do celular volta para a lista. No celular, **Enter** quebra
+a linha e a seta verde envia.
 
 Use o endereço do VPS (com `https://`), porque o microfone só funciona em site seguro. Para usar como aplicativo:
 
-- **Android (Chrome)**: menu **⋮** → **Adicionar à tela inicial** (ou **Instalar app**).
-- **iPhone (Safari)**: botão **Compartilhar** → **Adicionar à Tela de Início**.
-
-O ícone da Central aparece junto com os outros aplicativos e abre em tela cheia, sem a barra do navegador.
-
-## Equipe (login)
-
-- Cada pessoa entra com o próprio e-mail e senha. O login dura 30 dias no navegador (ou até clicar em **Sair**).
-- **Usuários** (menu da esquerda, só para administradores): **Adicionar pessoa** cria o acesso e mostra uma **senha
-  provisória** (com botão **Copiar**), que você passa para a pessoa. Ela troca em **Minha senha** no primeiro acesso.
-- No botão **⋯** de cada pessoa: **Gerar nova senha** cria uma provisória nova (para quem esqueceu). **Desativar
-  acesso** tira o acesso na hora: a tela da pessoa volta para o login. **Tornar administrador** permite que a pessoa
-  também gerencie usuários.
-- Depois de 10 senhas erradas seguidas para o mesmo e-mail, o login dele fica bloqueado por 15 minutos.
-- **Ficou sem acesso de administrador?** Pelo terminal:
-  `docker compose exec app node src/cli.ts redefinir-senha voce@email.com` (mostra uma senha provisória nova).
+- **Android (Chrome):** menu **⋮** → **Adicionar à tela inicial** (ou **Instalar app**).
+- **iPhone (Safari):** botão **Compartilhar** → **Adicionar à Tela de Início**.
 
 ## Backup
 
-- O serviço `backup` copia **todo dia às 3h** (horário de Brasília) os bancos `evolution` (sessões dos números) e
-  `central` (conversas e usuários), e as **mídias**, para a pasta **`backups`** do projeto. Guarda os últimos 7 dias.
+- O serviço `backup` copia **todo dia às 3h** (horário de Brasília) os bancos `central` (leads, equipe, conversas) e
+  `evolution` (sessões dos números), e as **mídias**, para a pasta **`backups`** do projeto. Guarda os últimos 7 dias.
 - Backup na hora: `docker compose exec backup sh /backup.sh agora`
 - A pasta `backups` fica no mesmo computador/servidor. **Copie-a de vez em quando para outro lugar** (seu computador,
   Google Drive). Se o servidor for perdido, é essa cópia que salva os dados. No VPS, ver [`docs/DEPLOY.md`](docs/DEPLOY.md).
+- Além disso, no **Painel**, **Base completa (CSV)** ou **Excel** baixa todos os leads com situação, resultado e quem
+  chamou.
 - **Restaurar** (substitui os dados atuais pelos do backup; troque a data pela do arquivo que quer usar):
 
   ```powershell
   docker compose stop app evolution
   docker compose exec backup pg_restore -d central --clean --if-exists /backups/central_2026-09-24_0300.dump
   docker compose exec backup pg_restore -d evolution --clean --if-exists /backups/evolution_2026-09-24_0300.dump
-  docker compose run --rm -v central-whatsapp_media_data:/restaurar --entrypoint sh backup -c "tar xzf /backups/midias_2026-09-24_0300.tar.gz -C /restaurar"
+  docker compose run --rm -v central-whatsapp_midias:/restaurar --entrypoint sh backup -c "tar xzf /backups/midias_2026-09-24_0300.tar.gz -C /restaurar"
   docker compose up -d
   ```
 
@@ -172,40 +210,16 @@ git pull
 docker compose up -d --build
 ```
 
-## API do backend
-
-Todas as rotas `/api` exigem login (cookie da sessão), menos `/api/auth/login`.
-
-| Rota | O que faz |
-|---|---|
-| `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/me` | Entrar, sair, quem sou eu |
-| `POST /api/auth/password` | Trocar a própria senha |
-| `GET/POST /api/users` · `PATCH /api/users/ID` · `POST /api/users/ID/reset-password` | Equipe (só administradores) |
-| `GET /api/instances` | Lista os números e o status de cada um |
-| `GET /api/conversations?tab=responderam` | Conversas em que o lead respondeu, da mais recente para a mais antiga |
-| `GET /api/conversations?tab=todas` | Todas as conversas (também aceita `&instanceId=1` para filtrar por número e `&q=maria` para buscar por nome ou telefone) |
-| `GET /api/stats` | Totais do menu: conversas com não lidas e números desconectados |
-| `GET /api/conversations/ID/messages` | Mensagens de uma conversa |
-| `POST /api/conversations/ID/messages` | Envia texto (`{"text": "..."}`) pelo mesmo número da conversa |
-| `POST /api/conversations/ID/read` | Zera as não lidas no sistema (não manda tique azul) |
-| `POST /api/conversations/ID/audio` | Envia áudio gravado (corpo = arquivo de áudio) como mensagem de voz |
-| `POST /api/conversations/ID/media?fileName=...&caption=...` | Envia imagem ou documento (corpo = arquivo) |
-| `GET /api/messages/ID/media` | Abre/baixa a mídia de uma mensagem |
-| `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções |
-| `PATCH /api/instances/ID` | Troca o apelido de um número |
-| `POST /api/instances/ID/connect` | Conecta/reconecta um número (o QR Code chega em tempo real) |
-| `POST /api/instances/NOME/import-history` | Reimporta o histórico dos últimos 14 dias de um número |
-
 ## Comandos úteis
 
 | Comando | O que faz |
 |---|---|
 | `docker compose ps` | Mostra o que está rodando |
-| `docker compose logs -f app` | Acompanha os logs do backend (`Ctrl + C` para sair) |
+| `docker compose logs -f app` | Acompanha os logs do sistema (`Ctrl + C` para sair) |
 | `docker compose logs -f evolution` | Acompanha os logs da Evolution |
 | `docker compose down` | Para tudo. **Os dados continuam salvos** |
 | `docker compose up -d` | Sobe tudo de novo |
-| `docker compose exec app node src/cli.ts listar-usuarios` | Lista os usuários |
+| `docker compose exec app node dist/server/criar-admin.js --email voce@email.com` | Recupera o acesso de dono (mostra uma senha nova) |
 | `docker compose exec backup sh /backup.sh agora` | Faz um backup na hora |
 
 > ⚠️ **Nunca** rode `docker compose down -v`: o `-v` apaga os volumes, ou seja, o banco de dados, as mídias e as
@@ -217,24 +231,42 @@ Todas as rotas `/api` exigem login (cookie da sessão), menos `/api/auth/login`.
 - **`'Invoke-RestMethod' não é reconhecido`**: você está no Prompt de Comando (cmd). Abra o PowerShell.
 - **`ports are not available` / `bind` na porta 3100**: outro programa usa a porta. Adicione `APP_PORT=3200` (ou outro
   número) no `.env` e rode `docker compose up -d` de novo. Na porta 8080 (Evolution), me avise.
-- **Troquei a senha do Postgres no `.env` depois de já ter subido**: o banco continua com a senha antiga. Volte a
-  senha antiga no `.env` ou me peça ajuda.
+- **Troquei a senha do Postgres no `.env` depois de já ter subido**: o banco continua com a senha antiga. Volte a senha
+  antiga no `.env` ou me peça ajuda.
 
-## Desenvolvimento
+## Rotas de WhatsApp da API
 
-- **Backend** (`backend/`): Node 24 + TypeScript rodando o `.ts` direto (sem etapa de compilação), Express 5 e Prisma 7.
-- **Frontend** (`frontend/`): React 19 + Vite, com ícones [Lucide](https://lucide.dev) e a fonte Inter (instalada
-  junto, sem depender do Google Fonts). Na imagem Docker ele é compilado e servido pelo próprio backend. Os estilos
-  ficam em `frontend/src/styles.css` (cores no começo do arquivo, com o modo escuro logo abaixo).
+Todas exigem login (cookie da sessão) e, nas que alteram dados, o cabeçalho `x-csrf-token`. As rotas de leads, listas,
+equipe e relatórios estão em `src/server/routes`.
 
-```powershell
-cd backend
-npm install
-npm test          # testes das regras de mensagens (@lid, grupos, tipos, status)
-npm run check     # verificação de tipos
+| Rota | O que faz |
+|---|---|
+| `GET /api/instances` | Lista os números e o status de cada um |
+| `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções (dono/administrador) |
+| `PATCH /api/instances/ID` | Troca o apelido de um número (dono/administrador) |
+| `POST /api/instances/ID/connect` | Conecta/reconecta um número; o QR Code chega em tempo real (dono/administrador) |
+| `POST /api/instances/ID/import-history` | Reimporta o histórico dos últimos 14 dias de um número (dono/administrador) |
+| `GET /api/conversations?tab=responderam` | Conversas em que o lead respondeu (também `tab=todas`, `&instanceId=1` e `&q=maria`) |
+| `GET /api/conversations/stats` | Totais do menu: conversas com não lidas e números desconectados |
+| `GET /api/conversations/ID` · `GET /api/conversations/ID/messages` | Uma conversa e as mensagens dela |
+| `POST /api/conversations/ID/messages` | Envia texto (`{"text": "..."}`) pelo mesmo número da conversa |
+| `POST /api/conversations/ID/read` | Zera as não lidas no sistema (não manda tique azul) |
+| `POST /api/conversations/ID/audio` | Envia áudio gravado (corpo = arquivo de áudio) como mensagem de voz |
+| `POST /api/conversations/ID/media?fileName=...&caption=...` | Envia imagem ou documento (corpo = arquivo) |
+| `GET /api/messages/ID/media` | Abre/baixa a mídia de uma mensagem |
+| `POST /webhook/evolution` | Eventos da Evolution (só pela rede interna do Docker, com o token secreto) |
 
-cd ..\frontend
-npm install
-npm run dev       # tela em http://localhost:5173, usando o backend do Docker (porta 3100)
-npm run check
-```
+## Para quem mantém o código
+
+- Stack: Node.js 22 + TypeScript, Fastify 5, Postgres (Kysely), Socket.io (tempo real das conversas), React 19 + Vite +
+  TanStack Query. Detalhes em [`docs/DECISOES.md`](docs/DECISOES.md).
+- Pastas: `src/server` (API, banco e migrações; WhatsApp em `src/server/modules/whatsapp`), `src/web` (telas),
+  `src/shared` (tipos e permissões usados pelos dois lados), `tests` (unitários, integração e ponta a ponta).
+- `npm install` e `npm run dev`: abre em <http://localhost:5173> e sobe um Postgres local sozinho (sem Docker). Na
+  primeira vez mostra a tela **Primeiro acesso**: cole o código que aparece no terminal. Sem `EVOLUTION_URL`, o
+  WhatsApp fica desligado e os itens **Conversas** e **Números** somem do menu; para testar o WhatsApp, use o Docker.
+- `npm test` roda os testes unitários, de integração (Postgres de verdade, com uma Evolution de mentira) e ponta a ponta
+  (Playwright, com o build de produção). Na primeira vez: `npx playwright install chromium`.
+- `npm run check` = lint + tipos + testes. A CI do GitHub roda o mesmo (`.github/workflows/ci.yml`).
+- Variáveis de ambiente: [`.env.example`](.env.example) (as do Docker) e `src/server/config.ts` (todas).
+- Outros documentos: [LGPD](docs/LGPD.md) e o [histórico do projeto](docs/historico).

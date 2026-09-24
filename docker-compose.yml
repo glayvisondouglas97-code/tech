@@ -85,20 +85,26 @@ services:
         condition: service_healthy
       evolution:
         condition: service_started
-    # Só acessível do próprio computador (porta 3100, ou APP_PORT do .env). No VPS, quem fica exposto é o Caddy (Fase 7).
+    # Só acessível do próprio computador (porta 3100, ou APP_PORT do .env). No VPS, quem fica exposto é o Caddy.
     ports:
       - "127.0.0.1:${APP_PORT:-3100}:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/central
+      # Endereço em que a equipe abre o sistema (no VPS, o docker-compose.prod.yml troca pelo domínio).
+      APP_URL: http://localhost:${APP_PORT:-3100}
+      # Código da tela "Primeiro acesso" (opcional). Sem ele, crie o dono pelo comando criar-admin.
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
       EVOLUTION_URL: http://evolution:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       # A Evolution entrega os webhooks pela rede interna do Docker, com este token secreto.
       WEBHOOK_URL: http://app:3000/webhook/evolution
       WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?defina WEBHOOK_TOKEN no arquivo .env}
       HISTORY_DAYS: 14
+      # "info" mostra cada pedido feito ao sistema; "warn" só avisos e erros (logs mais limpos).
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
     volumes:
-      # Áudios, imagens e documentos (os arquivos ficam aqui, não no banco).
-      - media_data:/app/media
+      # Áudios, imagens e documentos do WhatsApp (os arquivos ficam aqui, não no banco).
+      - midias:/app/media
 
   # Backup diário dos dois bancos e das mídias em ./backups (ver docker/backup/backup.sh).
   backup:
@@ -117,10 +123,10 @@ services:
     volumes:
       - ./docker/backup/backup.sh:/backup.sh:ro
       - ./backups:/backups
-      - media_data:/midias:ro
+      - midias:/midias:ro
 
 volumes:
   postgres_data:
   redis_data:
   evolution_instances:
-  media_data:
+  midias:

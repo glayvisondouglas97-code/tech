@@ -1,24 +1,21 @@
-# Etapa 1: compila o frontend (React) em arquivos estáticos.
-FROM node:24-alpine AS frontend
-WORKDIR /frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
-COPY frontend/ ./
-RUN npm run build
-
-# Etapa 2: backend, que também serve o frontend compilado.
-FROM node:24-alpine
+# Etapa 1: compila a interface (Vite) e o servidor (tsup).
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
-ENV NODE_ENV=production
-ENV PATH=/app/node_modules/.bin:$PATH
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build && npm prune --omit=dev
 
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --omit=dev
-
-COPY backend/ ./
-RUN prisma generate
-COPY --from=frontend /frontend/dist ./public
-
+# Etapa 2: só o necessário para rodar.
+FROM node:22-bookworm-slim
+ENV NODE_ENV=production TZ=America/Sao_Paulo PORT=3000 MEDIA_DIR=/app/media
+WORKDIR /app
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+# Pasta das mídias do WhatsApp (volume próprio no docker-compose). O sistema roda sem ser root.
+RUN mkdir -p /app/media && chown node:node /app/media
+USER node
 EXPOSE 3000
-# Aplica as migrações do banco e inicia o servidor (o Node 24 roda TypeScript direto).
-CMD ["sh", "-c", "prisma migrate deploy && exec node src/main.ts"]
+HEALTHCHECK CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "dist/server/index.js"]

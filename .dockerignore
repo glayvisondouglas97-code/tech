@@ -1,9 +1,11 @@
-# Nunca enviar segredos nem dependências locais para dentro da imagem.
+# Nunca enviar segredos, dependências locais, dados nem backups para dentro da imagem.
 .env
 .git
 **/node_modules
 **/dist
-backend/src/generated
-backend/public
-backend/media
+.data
+media
 backups
+tests/.tmp
+test-results
+playwright-report

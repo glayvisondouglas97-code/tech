@@ -4,20 +4,23 @@
 # Dependências e builds
 node_modules/
 dist/
+.data/
+
+# Testes
+coverage/
+test-results/
+playwright-report/
+tests/.tmp/
+*.log
+
+# Mídias do WhatsApp (no Docker ficam num volume próprio)
+media/
+
+# Backups (ficam só no servidor)
+backups/
 
 # Sistema/editores
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-
-# Cliente do Prisma (gerado por "npx prisma generate")
-backend/src/generated/
-
-# Frontend compilado
-frontend/dist/
-backend/public/
-backend/media/
-
-# Backups (ficam só no servidor)
-backups/

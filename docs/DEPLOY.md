@@ -1,4 +1,4 @@
-# Colocar a Central no VPS (domínio + HTTPS)
+# Colocar o sistema no VPS (domínio + HTTPS)
 
 Este guia instala o sistema num VPS com Ubuntu, com o endereço `https://whats.suaempresa.com.br` (troque pelo seu
 domínio em todos os comandos). O HTTPS é automático: o **Caddy** pede e renova o certificado sozinho.
@@ -86,22 +86,26 @@ docker compose logs caddy --tail 30
 A primeira vez leva alguns minutos. No log do Caddy, procure `certificate obtained successfully`. Depois disso, abra
 **https://whats.suaempresa.com.br** no navegador: deve aparecer a tela de login, com o cadeado de site seguro.
 
-## 7. Criar o primeiro acesso
+## 7. Criar o dono (primeiro acesso)
 
 ```bash
-docker compose exec app node src/cli.ts criar-admin "Seu Nome" voce@email.com
+docker compose exec app node dist/server/criar-admin.js --nome "Seu Nome" --email voce@email.com
 ```
 
-Entre no site com o e-mail e a senha provisória mostrada. Depois:
-1. troque a senha em **Minha senha** (clique no círculo com as suas iniciais, no canto de baixo à esquerda);
-2. cadastre a equipe em **Usuários** → **Adicionar pessoa**.
+Entre no site com o e-mail e a senha mostrada (ela aparece uma vez só). Depois:
+1. troque a senha em **Minha conta e senha** (clique no círculo com as suas iniciais, no canto de cima à direita);
+2. cadastre a equipe em **Usuários** → **Novo usuário** (passo a passo no [README](../README.md#5-cadastrar-a-equipe-usuários));
+3. importe as listas de leads em **Listas** → **Importar**.
+
+> As listas têm nome e telefone de pessoas reais. Elas ficam só no banco do VPS e nos backups: não envie as planilhas
+> para o GitHub.
 
 ## 8. Conectar os números (e desligar o sistema do seu computador)
 
 1. No seu computador, **pare o sistema local** para ele não disputar os números com o VPS. No PowerShell, dentro da
    pasta do projeto, rode `docker compose down`.
-2. Em cada celular: WhatsApp → **Dispositivos conectados** → toque no aparelho **Central WhatsApp** antigo →
-   **Desconectar**.
+2. Em cada celular: WhatsApp → **Dispositivos conectados** → toque no aparelho **Central WhatsApp** antigo (o do seu
+   computador) → **Desconectar**.
 3. No site do VPS: **Números** → **Adicionar número** → digite o apelido → **Criar e conectar** → escaneie o QR Code
    com cada celular.
 
@@ -153,4 +157,7 @@ Então abra <http://localhost:8080/manager> no navegador. A chave é a `EVOLUTIO
   Veja o motivo em `docker compose logs caddy --tail 50`.
 - **`defina DOMAIN no arquivo .env`**: faltou a linha `DOMAIN=` (passo 5).
 - **Ver se falta memória:** `free -h` e `docker stats --no-stream`.
-- **Esqueci a senha de administrador:** `docker compose exec app node src/cli.ts redefinir-senha voce@email.com`.
+- **Esqueci a senha do dono:** `docker compose exec app node dist/server/criar-admin.js --email voce@email.com` (gera uma
+  senha nova e a pessoa volta a ser dono).
+- **O build falha ao baixar o `xlsx`:** o leitor de planilhas vem do site oficial da SheetJS (`cdn.sheetjs.com`). Confira
+  se o VPS acessa a internet e rode `docker compose up -d --build` de novo.

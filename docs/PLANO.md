@@ -1,6 +1,10 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 a 6 concluídas e testadas pelo usuário. Fase 7 (login, backup e VPS) entregue, aguardando teste.**
+Status: **Fases 1 a 7 concluídas. Fase 8 (junção com o Chamador de Leads) entregue, aguardando teste.**
+
+> A partir da Fase 8, a Central virou parte do **Chamador de Leads** (Fastify + Kysely). As seções 3, 4.1 a 4.6
+> descrevem como cada parte foi pensada; onde falam em Express, Prisma, `backend/`, `frontend/`, `node src/cli.ts` ou
+> volume `media_data`, leia a seção 4.7, que diz o que mudou.
 
 ## 1. Versão da Evolution API
 
@@ -114,6 +118,12 @@ Dependências previstas (mínimo):
    settings automaticamente).
 6. Mídia: gravar e enviar áudio (sem ffmpeg no backend), imagens e documentos, e ouvir e ver o que chegar.
 7. Login (equipe com usuários e administradores), backup diário (`pg_dump` dos 2 bancos + mídias), Caddy com HTTPS e guia de deploy no VPS.
+8. Juntar com o Chamador de Leads: um sistema só (visual, login, permissões, Docker e backup do Chamador), com
+   Conversas e Números dentro dele. Tudo o que já funcionava continua funcionando.
+9. Botão **Chamar** do lead pelo sistema: escolher o número, conferir se o lead tem WhatsApp, abrir a conversa com o
+   texto vazio (para gravar áudio na hora), marcar o resultado sozinho e mostrar os dados do lead no chat. Sai o link
+   `wa.me` e saem as mensagens prontas.
+10. Ajustes, guia do VPS revisado e testes completos. Depois: backup e subida para o VPS.
 
 ## 4.1 Como a Fase 2 funciona
 
@@ -148,7 +158,7 @@ O backend avisa todos os navegadores abertos por Socket.io, logo depois de grava
 
 Se a conexão cair, a tela mostra um aviso. O Socket.io reconecta sozinho e, ao voltar, a tela busca de novo a lista
 e o chat aberto. Hoje todos recebem tudo. Quando houver permissão por número (ideia futura), basta enviar para "salas"
-por número em `backend/src/realtime.ts`.
+por número em `src/server/modules/whatsapp/realtime.ts`.
 
 ## 4.3 Como a Fase 5 (tela de números) funciona
 
@@ -206,6 +216,29 @@ por número em `backend/src/realtime.ts`.
   com cache de 1 ano (o nome muda a cada versão); fonte e ícones instalados junto (sem depender de sites de fora).
 - Dependências novas só no frontend: `lucide-react` (ícones) e `@fontsource-variable/inter` (fonte).
 
+## 4.7 Como a Fase 8 (junção com o Chamador) funciona
+
+- **Um sistema só**: o Chamador de Leads ficou na raiz do repositório e ganhou o WhatsApp da Central, reescrito para o
+  mesmo padrão dele: Fastify, Kysely (migração `0003_whatsapp`: `wa_instances`, `wa_contacts`, `wa_conversations`,
+  `wa_messages`), zod, testes com Vitest. As pastas `backend/`, `frontend/` e `leads/` saíram.
+- **Login e permissões do Chamador**: Argon2, sessão no banco com cookie `HttpOnly` (`__Host-` no HTTPS) e token CSRF
+  em todo pedido que altera dados. Todos os papéis veem e respondem todas as conversas; só dono e administrador mexem
+  nos números (`manageNumbers`). Cada mensagem enviada guarda quem enviou (`sent_by`).
+- **Telas**: **Conversas** e **Números** entraram no menu do Chamador, com o visual dele (cores, fonte Poppins, tema
+  claro/escuro no menu da conta) e selos de não lidas e de números desconectados. No celular, **Conversas** está na
+  barra de baixo.
+- **O que continua igual**: webhook com token pela rede interna, fila única e deduplicação, @lid, histórico de 14 dias,
+  tique azul só ao responder, tempo real por Socket.io (agora com o cookie do Chamador), áudio sem ffmpeg, mídias no
+  disco, upload de até 25 MB.
+- **Docker**: o mesmo `docker-compose.yml` (Evolution, Postgres, Redis, app, backup e, no VPS, Caddy). O `app` agora é
+  o Chamador compilado (`dist/`), as mídias ficam no volume **`midias`** e o dono é criado com
+  `node dist/server/criar-admin.js --nome "..." --email ...`.
+- **Dados antigos da Central** (usuários, conversas do banco `central` da Fase 7) não passam para o sistema novo: as
+  tabelas antigas ficam paradas no banco, sem uso. Os números continuam conectados na Evolution e o histórico dos
+  últimos 14 dias é importado de novo sozinho.
+- Saiu também o webhook da WhatsApp Business Cloud API que o Chamador tinha (desligado), porque o WhatsApp agora é pela
+  Evolution.
+
 ## 5. Decisões tomadas
 
 1. **Histórico ao conectar um número**: importar o histórico recente que o WhatsApp envia ao conectar, só de
@@ -214,7 +247,11 @@ por número em `backend/src/realtime.ts`.
    sistema**, nunca só por abrir. A instância fica com `readMessages = false`. O contador de não lidas *do
    sistema* zera ao abrir a conversa.
 3. **Lista de conversas**: duas abas, **Responderam** e **Todas**, mais o filtro por número e a busca.
-4. **A mensagem inicial continua saindo pelo celular**: o MVP não terá o botão "nova conversa".
+4. **Mensagem inicial**: até a Fase 8 sai pelo celular. Na Fase 9, o botão **Chamar** do lead abre a conversa no
+   sistema, pelo número escolhido.
 5. **Usuários**: você e a equipe, cada um com login próprio e todos vendo todos os números (por enquanto).
 6. **Ambiente local**: Windows com Docker Desktop, com instruções em PowerShell.
 7. **Produção**: domínio e VPS já disponíveis (Fase 7).
+8. **Junção com o Chamador** (Fase 8): visual do Chamador; todos veem todas as conversas; resultado do lead marcado
+   sozinho (1ª mensagem enviada pelo sistema → "Mensagem enviada"; resposta do lead → "Respondeu"); sem mensagens
+   prontas e sem link `wa.me` (Fase 9).

@@ -6,7 +6,5 @@
 	@webhook path /webhook/*
 	respond @webhook 404
 
-	header Strict-Transport-Security "max-age=31536000"
-
 	reverse_proxy app:3000
 }

@@ -2,6 +2,12 @@
 # No VPS, coloque no .env:  COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
 # Assim, "docker compose up -d --build" já usa os dois arquivos. Passo a passo em docs/DEPLOY.md.
 services:
+  app:
+    environment:
+      # Endereço público (HTTPS) e o Caddy na frente: o cookie de login só trafega criptografado.
+      APP_URL: https://${DOMAIN:?defina DOMAIN no arquivo .env, por exemplo whats.suaempresa.com.br}
+      TRUST_PROXY: "true"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped

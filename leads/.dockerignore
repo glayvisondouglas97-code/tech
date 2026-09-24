@@ -1,8 +1,0 @@
-node_modules
-dist
-.data
-.env
-.git
-tests/.tmp
-test-results
-playwright-report
