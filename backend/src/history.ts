@@ -4,6 +4,7 @@
 import { config } from './config.ts';
 import { evolution } from './evolution.ts';
 import { enqueue } from './queue.ts';
+import { publishReload } from './realtime.ts';
 import { saveMessage } from './store.ts';
 import { isNewerStatus } from './whatsapp.ts';
 
@@ -44,6 +45,7 @@ export async function importHistory(instanceName: string): Promise<{ total: numb
       page++;
     } while (page <= pages);
     console.log(`[histórico] ${instanceName}: ${saved} mensagens novas (de ${total} dos últimos ${config.historyDays} dias)`);
+    if (saved > 0) publishReload();
     return { total, saved };
   } finally {
     running.delete(instanceName);

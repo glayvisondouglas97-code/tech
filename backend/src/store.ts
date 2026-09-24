@@ -1,6 +1,7 @@
 // Gravação de mensagens no banco: contato → conversa → mensagem, sem duplicar.
 import { prisma } from './db.ts';
 import type { Contact, Conversation, Instance, Message, Prisma } from './generated/prisma/client.ts';
+import { publishConversation, publishConversationRemoved, publishInstance, publishMessage } from './realtime.ts';
 import {
   contactJids,
   isNewerStatus,
@@ -22,15 +23,21 @@ export type SaveOptions = {
 
 export type SavedMessage = { message: Message; conversation: Conversation };
 
+// O que mudou ao juntar contatos duplicados (telefone ↔ @lid), para avisar os navegadores depois de gravar.
+type MergeChanges = { removed: { id: number; mergedInto: number }[]; touched: Set<number> };
+
 // Obs.: evitamos o upsert do Prisma porque ele consome um número da sequência de IDs a cada chamada.
 export async function upsertInstance(name: string, data: { status?: string; phoneJid?: string | null } = {}): Promise<Instance> {
   const phoneJid = data.phoneJid ? normalizeJid(data.phoneJid) : undefined;
   const existing = await prisma.instance.findUnique({ where: { name } });
-  if (!existing) return prisma.instance.create({ data: { name, status: data.status ?? 'close', phoneJid } });
-  if ((data.status === undefined || data.status === existing.status) && (phoneJid === undefined || phoneJid === existing.phoneJid)) {
+  if (existing && (data.status ?? existing.status) === existing.status && (phoneJid ?? existing.phoneJid) === existing.phoneJid) {
     return existing;
   }
-  return prisma.instance.update({ where: { id: existing.id }, data: { status: data.status, phoneJid } });
+  const instance = existing
+    ? await prisma.instance.update({ where: { id: existing.id }, data: { status: data.status, phoneJid } })
+    : await prisma.instance.create({ data: { name, status: data.status ?? 'close', phoneJid } });
+  publishInstance(instance);
+  return instance;
 }
 
 // Salva uma mensagem. Retorna null se ela for ignorada (grupo, status, tipo sem conteúdo) ou se já existia.
@@ -48,24 +55,25 @@ export async function saveMessage(instanceName: string, msg: WaMessage, options:
   const fromMe = !!msg.key.fromMe;
   const leadName = !fromMe && msg.pushName?.trim() ? msg.pushName.trim() : null;
 
-  return prisma.$transaction(async (tx) => {
+  const changes: MergeChanges = { removed: [], touched: new Set() };
+  const { saved, statusUpdated } = await prisma.$transaction(async (tx) => {
     const existing = await tx.message.findUnique({
       where: { instanceId_waId: { instanceId: instance.id, waId: msg.key.id } },
     });
     if (existing) {
       // Mensagem repetida: não grava de novo, mas aproveita para aprender a relação telefone ↔ @lid.
-      if (jids.phoneJid && jids.lidJid) await resolveContact(tx, jids.phoneJid, jids.lidJid, leadName);
-      if (isNewerStatus(existing.status, msg.status)) {
-        await tx.message.update({ where: { id: existing.id }, data: { status: msg.status } });
-      }
-      return null;
+      if (jids.phoneJid && jids.lidJid) await resolveContact(tx, jids.phoneJid, jids.lidJid, leadName, changes);
+      const statusUpdated = isNewerStatus(existing.status, msg.status)
+        ? await tx.message.update({ where: { id: existing.id }, data: { status: msg.status } })
+        : null;
+      return { saved: null, statusUpdated };
     }
 
     let conversation: Conversation;
     if (options.conversationId) {
       conversation = await tx.conversation.findUniqueOrThrow({ where: { id: options.conversationId } });
     } else {
-      const contact = await resolveContact(tx, jids.phoneJid, jids.lidJid, leadName);
+      const contact = await resolveContact(tx, jids.phoneJid, jids.lidJid, leadName, changes);
       conversation =
         (await tx.conversation.findUnique({
           where: { instanceId_contactId: { instanceId: instance.id, contactId: contact.id } },
@@ -98,13 +106,37 @@ export async function saveMessage(instanceName: string, msg: WaMessage, options:
       },
     });
 
-    return { message, conversation: updated };
+    return { saved: { message, conversation: updated }, statusUpdated: null };
   });
+
+  // Histórico importado não gera um aviso por mensagem: no fim, a importação pede para a tela recarregar.
+  if (options.live) await publishSaveResult(changes, saved, statusUpdated);
+  return saved;
+}
+
+async function publishSaveResult(changes: MergeChanges, saved: SavedMessage | null, statusUpdated: Message | null) {
+  try {
+    for (const { id, mergedInto } of changes.removed) publishConversationRemoved(id, mergedInto);
+    if (statusUpdated) publishMessage('message:updated', statusUpdated);
+    if (saved) {
+      publishMessage('message:new', saved.message);
+      changes.touched.add(saved.conversation.id);
+    }
+    for (const id of changes.touched) await publishConversation(id);
+  } catch (error) {
+    console.error('[tempo real] falha ao avisar os navegadores:', error);
+  }
 }
 
 // Encontra (ou cria) o contato pelo telefone e/ou @lid. Se a mesma pessoa estiver em dois contatos
 // (um só com telefone e outro só com @lid), junta os dois num só.
-async function resolveContact(tx: Tx, phoneJid: string | null, lidJid: string | null, name: string | null): Promise<Contact> {
+async function resolveContact(
+  tx: Tx,
+  phoneJid: string | null,
+  lidJid: string | null,
+  name: string | null,
+  changes: MergeChanges,
+): Promise<Contact> {
   const or: Prisma.ContactWhereInput[] = [];
   if (phoneJid) or.push({ phoneJid });
   if (lidJid) or.push({ lidJid });
@@ -117,7 +149,7 @@ async function resolveContact(tx: Tx, phoneJid: string | null, lidJid: string | 
   // Fica o contato que tem telefone (ou o mais antigo); os outros são incorporados a ele.
   const [keep, ...others] = [...matches].sort((a, b) => Number(!a.phoneJid) - Number(!b.phoneJid) || a.id - b.id);
   for (const other of others) {
-    await mergeContact(tx, keep, other);
+    await mergeContact(tx, keep, other, changes);
   }
 
   const data = {
@@ -130,7 +162,7 @@ async function resolveContact(tx: Tx, phoneJid: string | null, lidJid: string | 
 }
 
 // Move as conversas e mensagens de "other" para "keep" e apaga "other".
-async function mergeContact(tx: Tx, keep: Contact, other: Contact): Promise<void> {
+async function mergeContact(tx: Tx, keep: Contact, other: Contact, changes: MergeChanges): Promise<void> {
   const conversations = await tx.conversation.findMany({ where: { contactId: other.id } });
   for (const conversation of conversations) {
     const target = await tx.conversation.findUnique({
@@ -138,6 +170,7 @@ async function mergeContact(tx: Tx, keep: Contact, other: Contact): Promise<void
     });
     if (!target) {
       await tx.conversation.update({ where: { id: conversation.id }, data: { contactId: keep.id } });
+      changes.touched.add(conversation.id);
       continue;
     }
     await tx.message.updateMany({ where: { conversationId: conversation.id }, data: { conversationId: target.id } });
@@ -155,6 +188,9 @@ async function mergeContact(tx: Tx, keep: Contact, other: Contact): Promise<void
       },
     });
     await tx.conversation.delete({ where: { id: conversation.id } });
+    changes.removed.push({ id: conversation.id, mergedInto: target.id });
+    changes.touched.delete(conversation.id);
+    changes.touched.add(target.id);
   }
   await tx.contact.delete({ where: { id: other.id } });
 }
@@ -165,5 +201,7 @@ export async function updateMessageStatus(instanceName: string, waId: string, st
   if (!instance) return null;
   const message = await prisma.message.findUnique({ where: { instanceId_waId: { instanceId: instance.id, waId } } });
   if (!message || !isNewerStatus(message.status, status)) return null;
-  return prisma.message.update({ where: { id: message.id }, data: { status } });
+  const updated = await prisma.message.update({ where: { id: message.id }, data: { status } });
+  publishMessage('message:updated', updated);
+  return updated;
 }

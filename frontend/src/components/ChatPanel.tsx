@@ -1,17 +1,25 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { api, mergeMessages, PAGE_SIZE, type ChatMessage, type ConversationItem } from '../api.ts';
+import {
+  api,
+  mergeMessages,
+  PAGE_SIZE,
+  type ChatMessage,
+  type ConversationItem,
+  type InstanceInfo,
+  type MessageEvent,
+} from '../api.ts';
 import { contactName, dayLabel, formatPhone, instanceColor, instanceLabel } from '../format.ts';
-import { usePolling } from '../usePolling.ts';
+import { useReconnect, useSocketEvent } from '../socket.ts';
 import { Composer } from './Composer.tsx';
 import { MessageBubble } from './MessageBubble.tsx';
 
 type Props = {
   conversationId: number;
+  instances: InstanceInfo[];
   onBack: () => void;
-  onConversationChanged: () => void;
 };
 
-export function ChatPanel({ conversationId, onBack, onConversationChanged }: Props) {
+export function ChatPanel({ conversationId, instances, onBack }: Props) {
   const [conversation, setConversation] = useState<ConversationItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasOlder, setHasOlder] = useState(false);
@@ -20,37 +28,45 @@ export function ChatPanel({ conversationId, onBack, onConversationChanged }: Pro
   const stickToBottom = useRef(true); // acompanha as mensagens novas enquanto a pessoa está no fim do chat
   const olderAnchor = useRef<number | null>(null); // mantém a posição ao carregar mensagens antigas
   const loadingOlder = useRef(false);
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
 
   // Zera as não lidas (só no sistema) enquanto a conversa está aberta e a aba do navegador visível.
-  const markReadIfNeeded = async (c: ConversationItem) => {
-    if (c.unreadCount > 0 && document.visibilityState === 'visible') {
-      await api.markRead(c.id);
-      onConversationChanged();
-    }
+  // O backend avisa todas as telas abertas, então a lista se atualiza sozinha.
+  const markReadIfNeeded = (c: ConversationItem | null) => {
+    if (c && c.unreadCount > 0 && document.visibilityState === 'visible') void api.markRead(c.id).catch(() => {});
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([api.conversation(conversationId), api.messages(conversationId)])
-      .then(([c, list]) => {
-        if (cancelled) return;
-        setConversation(c);
-        setMessages(list);
-        setHasOlder(list.length === PAGE_SIZE);
-        void markReadIfNeeded(c);
-      })
-      .catch((e: Error) => !cancelled && setError(e.message));
-    return () => {
-      cancelled = true;
-    };
-  }, [conversationId]);
-
-  usePolling(async () => {
+  const load = async () => {
     const [c, latest] = await Promise.all([api.conversation(conversationId), api.messages(conversationId)]);
     setConversation(c);
     setMessages((prev) => mergeMessages(prev, latest));
-    await markReadIfNeeded(c);
-  }, 3_000);
+    if (conversationRef.current === null) setHasOlder(latest.length === PAGE_SIZE);
+    markReadIfNeeded(c);
+  };
+
+  useEffect(() => {
+    load().catch((e: Error) => setError(e.message));
+    // Ao voltar para a aba do navegador, zera as não lidas da conversa aberta.
+    const onVisible = () => markReadIfNeeded(conversationRef.current);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+    // A tela é recriada ao trocar de conversa (key), então só roda uma vez.
+  }, []);
+
+  useReconnect(() => void load().catch(() => {}));
+
+  useSocketEvent<MessageEvent>('message:new', ({ conversationId: id, message }) => {
+    if (id === conversationId) setMessages((prev) => mergeMessages(prev, [message]));
+  });
+  useSocketEvent<MessageEvent>('message:updated', ({ conversationId: id, message }) => {
+    if (id === conversationId) setMessages((prev) => mergeMessages(prev, [message]));
+  });
+  useSocketEvent<ConversationItem>('conversation:updated', (updated) => {
+    if (updated.id !== conversationId) return;
+    setConversation(updated);
+    markReadIfNeeded(updated);
+  });
 
   useLayoutEffect(() => {
     const el = listRef.current;
@@ -90,7 +106,6 @@ export function ChatPanel({ conversationId, onBack, onConversationChanged }: Pro
       const sent = await api.sendText(conversationId, text);
       stickToBottom.current = true;
       setMessages((prev) => mergeMessages(prev, [sent]));
-      onConversationChanged();
     } catch (e) {
       setError((e as Error).message);
       throw e;
@@ -105,7 +120,9 @@ export function ChatPanel({ conversationId, onBack, onConversationChanged }: Pro
     );
   }
 
-  const disconnected = conversation.instance.status !== 'open';
+  // O status do número vem da lista de números, que é atualizada em tempo real.
+  const instanceStatus = instances.find((i) => i.id === conversation.instance.id)?.status ?? conversation.instance.status;
+  const disconnected = instanceStatus !== 'open';
 
   return (
     <main className="chat">

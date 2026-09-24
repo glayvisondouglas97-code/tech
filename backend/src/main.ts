@@ -5,6 +5,7 @@ import { apiRouter } from './api.ts';
 import { config } from './config.ts';
 import { prisma } from './db.ts';
 import { startInstanceSync } from './instances.ts';
+import { startRealtime } from './realtime.ts';
 import { webhookRouter } from './webhook.ts';
 
 const app = express();
@@ -27,6 +28,7 @@ const server = app.listen(config.port, (error?: Error) => {
   console.log(`Backend no ar na porta ${config.port}`);
   startInstanceSync();
 });
+startRealtime(server);
 
 function shutdown(signal: string) {
   console.log(`Encerrando (${signal})...`);

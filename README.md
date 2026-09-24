@@ -90,7 +90,8 @@ Abra **<http://localhost:3100>** no navegador.
 - **Direita**: o chat aberto. **Enter** envia e **Shift + Enter** quebra a linha. A resposta sai sempre pelo mesmo
   número da conversa.
 - Abrir a conversa zera as não lidas **no sistema**. O tique azul só vai para o lead quando alguém responde.
-- Por enquanto as mensagens novas aparecem em até 5 segundos. Na Fase 4 elas passam a aparecer na hora.
+- Mensagens novas, status (entregue/lida) e contadores aparecem na hora, em todas as telas abertas. Se a conexão cair,
+  aparece um aviso amarelo; quando ela volta, a tela busca sozinha o que chegou nesse meio tempo.
 - Áudios, imagens e documentos aparecem como rótulo (ex.: "🎤 Mensagem de voz"). Ouvir e ver vem na Fase 6.
 
 ## Como atualizar (a cada nova fase)

@@ -69,3 +69,12 @@ export function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): 
   for (const m of incoming) byId.set(m.id, m);
   return [...byId.values()].sort((a, b) => a.sentAt.localeCompare(b.sentAt) || a.id - b.id);
 }
+
+// Eventos de tempo real enviados pelo backend.
+export type MessageEvent = { conversationId: number; message: ChatMessage };
+export type ConversationRemovedEvent = { id: number; mergedInto: number };
+
+// Mesma ordem da lista: mais recente primeiro; empate pelo maior id.
+export function compareConversations(a: ConversationItem, b: ConversationItem): number {
+  return b.lastMessageAt.localeCompare(a.lastMessageAt) || b.id - a.id;
+}

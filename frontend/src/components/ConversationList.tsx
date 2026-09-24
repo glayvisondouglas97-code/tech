@@ -1,6 +1,7 @@
 import type { ConversationsState } from '../App.tsx';
 import type { InstanceInfo, Tab } from '../api.ts';
 import { contactName, formatPhone, instanceColor, instanceLabel, listTime } from '../format.ts';
+import { useOnline } from '../socket.ts';
 
 type Props = {
   tab: Tab;
@@ -15,6 +16,7 @@ type Props = {
 
 export function ConversationList(props: Props) {
   const { tab, onTabChange, instances, instanceId, onInstanceChange, conversations, selectedId, onSelect } = props;
+  const online = useOnline();
 
   const onScroll = (e: React.UIEvent<HTMLUListElement>) => {
     const el = e.currentTarget;
@@ -26,6 +28,12 @@ export function ConversationList(props: Props) {
       <header className="sidebar-header">
         <h1>Conversas</h1>
       </header>
+
+      {!online && (
+        <div className="offline-banner" role="status">
+          Sem conexão com o servidor. Tentando reconectar… As mensagens novas aparecem assim que voltar.
+        </div>
+      )}
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'responderam'} onClick={() => onTabChange('responderam')}>

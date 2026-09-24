@@ -2,9 +2,11 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { prisma } from './db.ts';
 import { evolution, EvolutionError } from './evolution.ts';
-import type { Contact, Conversation, Instance, Prisma } from './generated/prisma/client.ts';
+import { conversationDto, instanceDto, messageDto } from './dto.ts';
+import type { Instance, Prisma } from './generated/prisma/client.ts';
 import { importHistory } from './history.ts';
 import { enqueue } from './queue.ts';
+import { publishConversation } from './realtime.ts';
 import { saveMessage, upsertInstance } from './store.ts';
 
 class HttpError extends Error {
@@ -27,14 +29,12 @@ function parseLimit(value: unknown, fallback: number, max: number): number {
   return Number.isInteger(limit) && limit > 0 ? Math.min(limit, max) : fallback;
 }
 
-const phoneOf = (jid: string | null) => (jid ? jid.split('@')[0] : null);
-
 export const apiRouter = Router();
 apiRouter.use(express.json({ limit: '1mb' }));
 
 apiRouter.get('/instances', async (_req, res) => {
   const instances = await prisma.instance.findMany({ orderBy: { name: 'asc' } });
-  res.json(instances.map((i) => ({ id: i.id, name: i.name, nickname: i.nickname, phone: phoneOf(i.phoneJid), status: i.status })));
+  res.json(instances.map(instanceDto));
 });
 
 // Lista de conversas, da mais recente para a mais antiga.
@@ -53,7 +53,7 @@ apiRouter.get('/conversations', async (req, res) => {
     ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     include: { contact: true, instance: true },
   });
-  res.json(conversations.map(toConversationDto));
+  res.json(conversations.map(conversationDto));
 });
 
 apiRouter.get('/conversations/:id', async (req, res) => {
@@ -62,21 +62,8 @@ apiRouter.get('/conversations/:id', async (req, res) => {
     include: { contact: true, instance: true },
   });
   if (!conversation) throw new HttpError(404, 'Conversa não encontrada');
-  res.json(toConversationDto(conversation));
+  res.json(conversationDto(conversation));
 });
-
-function toConversationDto(c: Conversation & { contact: Contact; instance: Instance }) {
-  return {
-    id: c.id,
-    unreadCount: c.unreadCount,
-    leadReplied: c.leadReplied,
-    lastMessageAt: c.lastMessageAt,
-    lastMessagePreview: c.lastMessagePreview,
-    lastMessageFromMe: c.lastMessageFromMe,
-    contact: { id: c.contact.id, name: c.contact.name, phone: phoneOf(c.contact.phoneJid) },
-    instance: { id: c.instance.id, name: c.instance.name, nickname: c.instance.nickname, status: c.instance.status },
-  };
-}
 
 // Mensagens de uma conversa, em ordem cronológica. ?before=<id da mensagem mais antiga já carregada>
 apiRouter.get('/conversations/:id/messages', async (req, res) => {
@@ -90,7 +77,7 @@ apiRouter.get('/conversations/:id/messages', async (req, res) => {
     take: limit,
     ...(before && { cursor: { id: before }, skip: 1 }),
   });
-  res.json(messages.reverse().map(({ instanceId, remoteJid, ...m }) => m));
+  res.json(messages.reverse().map(messageDto));
 });
 
 // Zera o contador de não lidas no sistema (não manda tique azul para o lead).
@@ -98,6 +85,7 @@ apiRouter.post('/conversations/:id/read', async (req, res) => {
   const id = parseId(req.params.id);
   const { count } = await prisma.conversation.updateMany({ where: { id }, data: { unreadCount: 0 } });
   if (!count) throw new HttpError(404, 'Conversa não encontrada');
+  await publishConversation(id);
   res.sendStatus(204);
 });
 
@@ -137,8 +125,7 @@ apiRouter.post('/conversations/:id/messages', async (req, res) => {
     console.error(`[envio] não foi possível marcar como lida a conversa ${conversation.id}:`, (error as Error).message),
   );
 
-  const { instanceId, remoteJid, ...body } = message;
-  res.status(201).json(body);
+  res.status(201).json(messageDto(message));
 });
 
 // Confere se o número está conectado antes de enviar. Se o status salvo não for "open", confirma na hora com a Evolution.

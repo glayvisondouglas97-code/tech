@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 e 2 concluídas e testadas pelo usuário. Fase 3 (tela de conversas) entregue, aguardando teste.**
+Status: **Fases 1 a 3 concluídas e testadas pelo usuário. Fase 4 (tempo real) entregue, aguardando teste.**
 
 ## 1. Versão da Evolution API
 
@@ -97,7 +97,7 @@ O `Contact` fica separado da conversa porque o mesmo lead pode falar com vários
 ideias futuras ("não contatar", aviso de lead em outro número, relatórios) sem precisar implementá-las agora.
 
 Dependências previstas (mínimo):
-- backend: express, prisma + @prisma/client + @prisma/adapter-pg + pg (o Prisma 7 exige o driver), socket.io (Fase 4) e multer (upload, Fase 6). O TypeScript roda direto no Node 24, sem tsx nem etapa de build;
+- backend: express, prisma + @prisma/client + @prisma/adapter-pg + pg (o Prisma 7 exige o driver), socket.io e multer (upload, Fase 6). O TypeScript roda direto no Node 24, sem tsx nem etapa de build;
 - frontend: react, react-dom, socket.io-client e vite;
 - senhas com `crypto.scrypt`, nativo do Node, sem biblioteca.
 
@@ -131,6 +131,23 @@ Dependências previstas (mínimo):
   um contato que só tem @lid não recebe o tique azul.
 - **Não lidas**: somam com mensagem do lead ao vivo, zeram quando respondemos (pelo sistema ou pelo celular) e zeram
   ao abrir a conversa no sistema. O histórico importado não soma não lidas.
+
+## 4.2 Como a Fase 4 (tempo real) funciona
+
+O backend avisa todos os navegadores abertos por Socket.io, logo depois de gravar no banco:
+
+| Evento | Quando |
+|---|---|
+| `message:new` | mensagem nova (recebida, enviada pelo celular ou pelo sistema) |
+| `message:updated` | status mudou (entregue, lida, ouvida) |
+| `conversation:updated` | a conversa mudou (última mensagem, não lidas, nome do lead) |
+| `conversation:removed` | duas conversas da mesma pessoa (telefone e @lid) foram juntadas |
+| `instance:updated` | um número conectou ou caiu |
+| `conversations:reload` | a importação de histórico terminou: a tela recarrega a lista |
+
+Se a conexão cair, a tela mostra um aviso. O Socket.io reconecta sozinho e, ao voltar, a tela busca de novo a lista
+e o chat aberto. Hoje todos recebem tudo. Quando houver permissão por número (ideia futura), basta enviar para "salas"
+por número em `backend/src/realtime.ts`.
 
 ## 5. Decisões tomadas
 
