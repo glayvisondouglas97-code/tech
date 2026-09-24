@@ -14,7 +14,7 @@ O plano completo e as decisões estão em [`docs/PLANO.md`](docs/PLANO.md).
 | `redis` | Cache da Evolution |
 | `app` | Nosso backend: recebe os webhooks, grava contatos, conversas e mensagens, envia respostas |
 
-A Evolution (`127.0.0.1:8080`) e o backend (`127.0.0.1:3000`) só ficam acessíveis no próprio computador,
+A Evolution (`127.0.0.1:8080`) e o backend (`127.0.0.1:3100`) só ficam acessíveis no próprio computador,
 nunca pela rede.
 
 ## Como rodar no Windows
@@ -118,8 +118,8 @@ Dá para abrir as rotas `GET` direto no navegador.
 
 - **`defina WEBHOOK_TOKEN no arquivo .env`** (ou outra variável): falta essa linha no `.env` (passo 2).
 - **`'Invoke-RestMethod' não é reconhecido`**: você está no Prompt de Comando (cmd). Abra o PowerShell.
-- **Porta 8080 ou 3000 já em uso**: outro programa está usando a porta. Feche o programa ou me avise para trocarmos
-  a porta.
+- **`ports are not available` / `bind` na porta 3100**: outro programa usa a porta. Adicione `APP_PORT=3200` (ou outro
+  número) no `.env` e rode `docker compose up -d` de novo. Na porta 8080 (Evolution), me avise.
 - **Troquei a senha do Postgres no `.env` depois de já ter subido**: o banco continua com a senha antiga. Volte a
   senha antiga no `.env` ou me peça ajuda.
 

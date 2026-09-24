@@ -85,9 +85,9 @@ services:
         condition: service_healthy
       evolution:
         condition: service_started
-    # Só acessível do próprio computador. No VPS, quem fica exposto é o Caddy (Fase 7).
+    # Só acessível do próprio computador (porta 3100, ou APP_PORT do .env). No VPS, quem fica exposto é o Caddy (Fase 7).
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${APP_PORT:-3100}:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/central
       EVOLUTION_URL: http://evolution:8080
