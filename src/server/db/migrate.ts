@@ -6,6 +6,7 @@ import * as m0003 from './migrations/0003_whatsapp';
 import * as m0004 from './migrations/0004_chamar_pelo_sistema';
 import * as m0005 from './migrations/0005_numeros_por_responsavel';
 import * as m0006 from './migrations/0006_exclusoes';
+import * as m0007 from './migrations/0007_audios';
 
 /** Lista fixa de migrações: funciona igual no código TypeScript e no build empacotado. */
 const migrations: Record<string, Migration> = {
@@ -15,6 +16,7 @@ const migrations: Record<string, Migration> = {
   '0004_chamar_pelo_sistema': m0004,
   '0005_numeros_por_responsavel': m0005,
   '0006_exclusoes': m0006,
+  '0007_audios': m0007,
 };
 
 class StaticProvider implements MigrationProvider {

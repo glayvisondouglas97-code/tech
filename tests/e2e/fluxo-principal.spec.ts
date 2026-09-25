@@ -19,6 +19,28 @@ mkdirSync(SHOTS, { recursive: true });
 
 const shot = (page: Page, name: string) =>
   page.screenshot({ path: resolve(SHOTS, `${name}.png`), fullPage: true });
+
+/** WAV curtinho e válido (silêncio) para o navegador conseguir tocar o áudio no teste. */
+function tinyWav(): Buffer {
+  const sampleRate = 8000;
+  const dataSize = 800; // ~0,1s, 8 bits mono
+  const buf = Buffer.alloc(44 + dataSize);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + dataSize, 4);
+  buf.write('WAVE', 8);
+  buf.write('fmt ', 12);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20); // PCM
+  buf.writeUInt16LE(1, 22); // mono
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate, 28);
+  buf.writeUInt16LE(1, 32);
+  buf.writeUInt16LE(8, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(dataSize, 40);
+  buf.fill(128, 44); // silêncio em PCM 8 bits
+  return buf;
+}
 /** Clica no menu lateral e tira o mouse de cima dele (o menu abre ao passar o mouse e cobriria a tela). */
 async function nav(page: Page, label: string) {
   await page
@@ -168,6 +190,22 @@ test('atendente chama pelo WhatsApp do sistema e o lead é marcado sozinho', asy
   await expect(admin.getByText(`Agora ${ana.name} é responsável por whatsapp-01.`)).toBeVisible();
   await shot(admin, '05a-numeros-responsavel');
 
+  // A gestora salva um áudio na biblioteca: o botão Chamar vai enviá-lo sorteado (Plano A).
+  await nav(admin, 'Áudios');
+  await admin
+    .getByRole('button', { name: /Salvar/ })
+    .first()
+    .click();
+  const audioDlg = admin.getByRole('dialog', { name: 'Salvar áudio' });
+  await audioDlg.getByLabel('Nome do áudio').fill('Apresentação — teste');
+  await audioDlg
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'ola.wav', mimeType: 'audio/wav', buffer: tinyWav() });
+  await audioDlg.getByRole('button', { name: 'Salvar áudio' }).click();
+  await expect(admin.getByText('Áudio salvo.')).toBeVisible();
+  await expect(admin.locator('.wa-lib-item', { hasText: 'Apresentação — teste' })).toBeVisible();
+  await shot(admin, '05a2-audio-salvo');
+
   const { context, page } = await newAttendantContext(browser);
   await login(page, ana.email, ana.password);
   const first = page.locator('li.lead').first();
@@ -184,22 +222,17 @@ test('atendente chama pelo WhatsApp do sistema e o lead é marcado sozinho', asy
   await expect(dialog.getByText('Por qual número?')).toBeVisible();
   await shot(page, '05b-escolher-numero');
   await dialog.getByRole('button', { name: /whatsapp-01/ }).click();
+  // Ao escolher o número, o sistema sorteia um áudio salvo e o envia sozinho como mensagem de voz.
+  await expect(page.getByText('Áudio enviado: Apresentação — teste')).toBeVisible();
   await expect(page).toHaveURL(/\/conversas\/\d+$/);
   // Título do chat = empresa do lead; a faixa do lead mostra a situação e o sócio.
   await expect(page.locator('.wa-chat-title')).toContainText(name);
   const strip = page.locator('.wa-lead');
-  await expect(strip).toContainText('Na sua fila');
   await expect(strip).toContainText(`Sócio: ${socio}`);
-  await expect(page.getByText('Conversa nova')).toBeVisible();
-  await expect(page.getByPlaceholder('Digite uma mensagem')).toHaveValue('');
-  await shot(page, '05c-conversa-nova');
-
-  // A primeira mensagem enviada marca o lead como "Mensagem enviada".
-  await page.getByPlaceholder('Digite uma mensagem').fill('Olá! Tudo bem?');
-  await page.keyboard.press('Enter');
-  await expect(page.locator('.wa-bubble', { hasText: 'Olá! Tudo bem?' })).toBeVisible();
+  // A bolha de áudio aparece e o lead já fica "Mensagem enviada", sem digitar nada.
+  await expect(page.locator('.wa-bubble .wa-audio-play')).toBeVisible();
   await expect(strip.getByText('Mensagem enviada')).toBeVisible();
-  await shot(page, '05d-mensagem-enviada');
+  await shot(page, '05c-audio-enviado');
 
   // De volta à fila: o lead saiu e conta como chamado hoje.
   await strip.getByRole('button', { name: 'Voltar para a fila' }).click();

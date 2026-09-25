@@ -32,6 +32,9 @@ por eles. Dono, administrador e supervisor veem as conversas de todos os número
 (pela tela e também pelo tempo real). Dono e administrador conectam, renomeiam e trocam o responsável de qualquer
 número; o supervisor vê, mas só mexe nos próprios.
 
+**Áudios do Chamar:** o dono e o administrador montam a biblioteca de áudios na tela **Áudios**. Todo atendente usa
+esses áudios ao chamar um lead (o sistema sorteia um e envia), mas só a gestão cadastra e exclui.
+
 ## Serviços (Docker)
 
 | Serviço | Para quê |
@@ -175,13 +178,31 @@ WhatsApp do celular continua funcionando. Quem pode: o responsável pelo número
    **9** escolhem pela posição. Números desconectados aparecem apagados; o selo **Já conversou** mostra por qual número
    essa empresa já foi chamada.
 3. O sistema confere se o telefone do lead tem WhatsApp. Se não tiver, oferece **Marcar como Sem WhatsApp**.
-4. A conversa abre em **Conversas**, com a caixa de texto vazia: grave o áudio no **microfone** (ou escreva) e envie.
+4. Ao escolher o número, o sistema **sorteia um áudio salvo** (ver **Áudios do Chamar** abaixo) e o envia ao lead como
+   mensagem de voz. A conversa abre em **Conversas**, onde dá para continuar (gravar outro áudio, escrever, enviar
+   arquivo). Se ainda não houver nenhum áudio salvo, a conversa abre vazia para você gravar na hora.
 5. Ao sair a primeira mensagem, o lead fica **Chamado · Mensagem enviada** e sai da sua fila. Quando ele responder, o
    resultado muda sozinho para **Respondeu** (e a resposta fica no histórico do lead).
 6. No alto da conversa aparece a faixa do lead (situação, sócio e lista), com **Ver lead** (ficha e histórico, para
    anotar e agendar retorno) e **Voltar para a fila**. No celular, a seta do alto volta para a fila.
 
 Uma conversa aberta pelo **Chamar** só aparece na lista de conversas depois da primeira mensagem.
+
+### Áudios do Chamar
+
+Em **Áudios** (no menu; só o dono e o administrador), você monta a biblioteca de áudios que o botão **Chamar** usa:
+
+1. Clique em **Salvar áudio**, dê um nome (ex.: `Apresentação — 20s`) e **grave pelo microfone** ou **escolha um
+   arquivo** já pronto. Ouça a prévia e clique em **Salvar áudio**.
+2. Salve **várias versões da mesma mensagem**, de durações diferentes. Ao chamar um lead, o sistema **sorteia** uma
+   delas — assim não vai sempre o mesmo áudio para todos os clientes. O sorteio evita repetir o último áudio que aquele
+   número mandou.
+3. Cada áudio tem um interruptor **No sorteio / Desligado** (o desligado fica guardado, mas não é enviado) e um botão
+   para **excluir**. As mensagens já enviadas às conversas continuam lá.
+
+> **Importante:** cada envio é uma ação do atendente (um clique por lead). O sistema **não** faz disparo automático em
+> massa. Para enviar muitos áudios por dia sem risco de banimento, o caminho é a API oficial do WhatsApp Business (Meta),
+> que pode ser avaliada mais para frente.
 
 ### Conversas (WhatsApp)
 
@@ -284,8 +305,11 @@ equipe e relatórios estão em `src/server/routes`.
 
 | Rota | O que faz |
 |---|---|
-| `POST /api/leads/ID/conversation` | "Chamar": confere se o lead tem WhatsApp e abre a conversa pelo número escolhido (`{"instanceId": 1}`) |
+| `POST /api/leads/ID/conversation` | "Chamar": confere se o lead tem WhatsApp e abre a conversa pelo número escolhido (`{"instanceId": 1}`); com `"sendAudio": true`, sorteia e envia um áudio salvo |
 | `GET /api/leads/ID/conversations` | Conversas já abertas com o lead (por qual número) |
+| `GET /api/audios` · `POST /api/audios?label=...&seconds=...` | Lista os áudios do Chamar / salva um novo (corpo = arquivo). Só dono/administrador |
+| `PATCH /api/audios/ID` · `POST /api/audios/ID/delete` | Liga/desliga (`{"active": true}`) ou exclui um áudio |
+| `GET /api/audios/ID/media` | Ouve o áudio salvo (tela de Áudios) |
 | `GET /api/instances` | Lista os números que a pessoa vê (atendente: só os dele), com status e responsável |
 | `POST /api/instances` | Cria um número novo (`{"nickname": "..."}`), já com webhook e opções; quem cria fica como responsável |
 | `PATCH /api/instances/ID` | Troca o apelido (responsável ou dono/administrador) e o responsável (`{"ownerId": "..."}`, só dono/administrador) |

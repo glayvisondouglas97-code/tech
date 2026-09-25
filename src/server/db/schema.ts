@@ -216,6 +216,26 @@ export interface WaDeletedMessagesTable {
   deleted_at: Generated<Date>;
 }
 
+/**
+ * Biblioteca de áudios do "Chamar": várias versões da mesma mensagem, sorteadas na hora do envio.
+ * O arquivo fica na pasta de mídias (audios/<id>.<ext>).
+ */
+export interface WaAudiosTable {
+  id: Generated<number>;
+  /** Nome para a equipe reconhecer (ex.: "Apresentação — 20s"). */
+  label: string;
+  /** Caminho do arquivo, relativo à pasta de mídias. */
+  media_path: string;
+  media_mime: string;
+  /** Duração aproximada em segundos (informada pelo navegador ao salvar). */
+  seconds: number | null;
+  bytes: number;
+  /** Só os ativos entram no sorteio. */
+  active: Generated<boolean>;
+  created_by: string | null;
+  created_at: Generated<Date>;
+}
+
 export interface WaMessagesTable {
   id: Generated<number>;
   instance_id: number;
@@ -256,6 +276,7 @@ export interface Database {
   wa_conversations: WaConversationsTable;
   wa_messages: WaMessagesTable;
   wa_deleted_messages: WaDeletedMessagesTable;
+  wa_audios: WaAudiosTable;
 }
 
 export type User = Selectable<UsersTable>;
@@ -266,3 +287,4 @@ export type WaInstance = Selectable<WaInstancesTable>;
 export type WaContact = Selectable<WaContactsTable>;
 export type WaConversation = Selectable<WaConversationsTable>;
 export type WaMessage = Selectable<WaMessagesTable>;
+export type WaAudio = Selectable<WaAudiosTable>;

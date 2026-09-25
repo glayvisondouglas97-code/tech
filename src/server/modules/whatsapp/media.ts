@@ -24,6 +24,8 @@ const EXTENSIONS: Record<string, string> = {
   'audio/mp4': 'm4a',
   'audio/mpeg': 'mp3',
   'audio/aac': 'aac',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
@@ -42,9 +44,21 @@ const INLINE_TYPES = /^(image\/(jpeg|png|webp|gif)|audio\/[\w.+-]+|video\/(mp4|w
 export const baseMime = (mime: string | null | undefined) =>
   (mime ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
 
-function extensionFor(mime: string, fileName: string | null): string {
+export function extensionFor(mime: string, fileName: string | null): string {
   const fromName = fileName?.match(/\.([a-z0-9]{1,8})$/i)?.[1]?.toLowerCase();
   return EXTENSIONS[baseMime(mime)] ?? fromName ?? 'bin';
+}
+
+/** Caminho absoluto de um arquivo dentro da pasta de mídias (a partir do caminho relativo guardado). */
+export function mediaPathOf(relative: string): string {
+  return join(mediaDir, relative);
+}
+
+/** Grava um arquivo na pasta de mídias (ex.: um áudio da biblioteca), criando as pastas se preciso. */
+export async function writeMediaFile(relative: string, data: Buffer): Promise<void> {
+  const absolute = join(mediaDir, relative);
+  await mkdir(dirname(absolute), { recursive: true });
+  await writeFile(absolute, data);
 }
 
 export function isMediaMessage(message: Pick<WaMessage, 'type'>): boolean {

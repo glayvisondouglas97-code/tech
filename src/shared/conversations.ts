@@ -27,10 +27,34 @@ export interface ConversationItem {
   lead: { id: number; label: string } | null;
 }
 
-/** Resposta do "Chamar" de um lead: a conversa para abrir e, se for o caso, o aviso de ritmo. */
+/** Resposta do "Chamar" de um lead: a conversa para abrir, o aviso de ritmo e o áudio sorteado (se houver). */
 export interface LeadChatResult {
   conversationId: number;
   warning: string | null;
+  /** Áudio enviado ao abrir a conversa (Plano A). Ausente quando o envio de áudio não foi pedido. */
+  audio?: LeadAudioResult;
+}
+
+/** Resultado do sorteio de áudio no "Chamar". */
+export interface LeadAudioResult {
+  sent: boolean;
+  /** Qual áudio foi sorteado e enviado. */
+  label: string | null;
+  /** Motivo de não ter enviado (ex.: nenhum áudio salvo). */
+  reason?: 'sem_audios';
+}
+
+/** Áudio salvo na biblioteca (Plano A: sorteado e enviado pelo botão Chamar). */
+export interface AudioItem {
+  id: number;
+  label: string;
+  mime: string;
+  /** Duração aproximada em segundos. */
+  seconds: number | null;
+  bytes: number;
+  active: boolean;
+  createdAt: string;
+  createdBy: { id: string; name: string } | null;
 }
 
 /** Conversa já aberta com o lead por um dos números (para a janela de escolha do número). */

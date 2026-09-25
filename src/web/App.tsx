@@ -10,6 +10,7 @@ import { QueuePage } from './pages/QueuePage';
 
 // Telas de gestão e menos usadas carregam sob demanda: o atendente no celular baixa só o necessário.
 const AccountPage = lazy(() => import('./pages/AccountPage').then((m) => ({ default: m.AccountPage })));
+const AudiosPage = lazy(() => import('./pages/AudiosPage').then((m) => ({ default: m.AudiosPage })));
 const AuditPage = lazy(() => import('./pages/AuditPage').then((m) => ({ default: m.AuditPage })));
 const CalledPage = lazy(() => import('./pages/CalledPage').then((m) => ({ default: m.CalledPage })));
 const ConversationsPage = lazy(() =>
@@ -94,6 +95,14 @@ export function App() {
             element={
               <Protected>
                 <NumbersPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/audios"
+            element={
+              <Protected perm="manageAudios">
+                <AudiosPage />
               </Protected>
             }
           />

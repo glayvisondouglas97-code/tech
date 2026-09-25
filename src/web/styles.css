@@ -5198,3 +5198,119 @@ dialog.dlg:has(.wa-qr-layout) {
 .wa-chat-head > .icon-btn:last-child {
   flex: none;
 }
+
+/* ---------- Biblioteca de áudios do Chamar (Plano A) ---------- */
+.wa-lib-count {
+  margin: -6px 0 14px;
+}
+.wa-lib {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wa-lib-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+.wa-lib-item.off {
+  opacity: 0.6;
+}
+.wa-lib-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.wa-lib-main b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wa-lib-main small {
+  color: var(--muted);
+}
+.wa-lib-audio {
+  height: 36px;
+  max-width: 240px;
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+  user-select: none;
+}
+.switch input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--wa, #16a34a);
+  cursor: pointer;
+}
+.wa-lib-ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0 4px;
+}
+.wa-lib-ways .btn {
+  flex: 1;
+  min-width: 160px;
+  justify-content: center;
+}
+.wa-lib-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+}
+.wa-lib-preview audio {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+}
+.wa-lib-rec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+}
+.wa-lib-rec .rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #dc2626;
+  animation: rec-pulse 1.1s var(--ease) infinite;
+}
+.wa-lib-rec .rec-time {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes rec-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (max-width: 560px) {
+  .wa-lib-item {
+    flex-wrap: wrap;
+  }
+  .wa-lib-audio {
+    order: 3;
+    max-width: none;
+    width: 100%;
+  }
+}

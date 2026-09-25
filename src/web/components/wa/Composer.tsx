@@ -235,7 +235,7 @@ function useObjectUrl(blob: Blob | null): string | null {
 }
 
 /** Grava áudio pelo microfone do navegador (WebM/Opus no Chrome e Edge; MP4 no Safari). */
-function useAudioRecorder(onError: (message: string) => void) {
+export function useAudioRecorder(onError: (message: string) => void) {
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const mediaRecorder = useRef<MediaRecorder | null>(null);

@@ -2,6 +2,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import type {
+  AudioItem,
   ChatMessage,
   ConversationItem,
   ConversationStats,
@@ -78,9 +79,18 @@ export const wa = {
       `/conversations/${id}/media${qs({ fileName: file.name, caption: caption || undefined })}`,
       file,
     ),
+
+  // Biblioteca de áudios (Plano A): o botão Chamar sorteia um destes e envia como mensagem de voz.
+  audios: () => api<AudioItem[]>('/audios'),
+  createAudio: (label: string, seconds: number | null, audio: Blob) =>
+    upload<AudioItem>(`/audios${qs({ label, seconds: seconds ?? undefined })}`, audio),
+  setAudioActive: (id: number, active: boolean) =>
+    api<AudioItem>(`/audios/${id}`, { method: 'PATCH', body: { active } }),
+  deleteAudio: (id: number) => api<void>(`/audios/${id}/delete`, { body: {} }),
 };
 
 export const mediaUrl = (messageId: number) => `/api/messages/${messageId}/media`;
+export const audioMediaUrl = (audioId: number) => `/api/audios/${audioId}/media`;
 
 /** Junta duas listas de mensagens sem repetir (a mais nova vence) e em ordem cronológica. */
 export function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {

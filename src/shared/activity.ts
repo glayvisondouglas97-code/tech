@@ -67,6 +67,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   excluiu_numero: 'Excluiu número de WhatsApp',
   excluiu_conversas: 'Excluiu conversas do WhatsApp',
   apagou_mensagens: 'Apagou mensagens do WhatsApp',
+  criou_audio: 'Salvou áudio para o Chamar',
+  ativou_audio: 'Ativou áudio do Chamar',
+  desativou_audio: 'Desativou áudio do Chamar',
+  excluiu_audio: 'Excluiu áudio do Chamar',
 };
 
 export function actionLabel(action: string): string {
@@ -136,6 +140,10 @@ export const ACTIVITY_CATEGORIES = {
       'excluiu_numero',
       'excluiu_conversas',
       'apagou_mensagens',
+      'criou_audio',
+      'ativou_audio',
+      'desativou_audio',
+      'excluiu_audio',
     ],
   },
 } as const;

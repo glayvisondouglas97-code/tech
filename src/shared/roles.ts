@@ -56,6 +56,11 @@ export const can = {
    * números e cuidar deles.
    */
   manageNumbers: isAdmin,
+  /**
+   * Cadastrar e excluir os áudios que o botão Chamar sorteia. Todo atendente usa os áudios ao chamar,
+   * mas só o dono e o administrador montam a biblioteca.
+   */
+  manageAudios: isAdmin,
 } satisfies Record<string, (r: Role) => boolean>;
 
 /** Papéis que cada papel pode criar e gerenciar. */

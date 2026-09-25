@@ -93,10 +93,23 @@ function ChooseNumberDialog({ lead, onClose }: { lead: LeadItem; onClose: () => 
     setBusyId(instanceId);
     setError(null);
     try {
-      const r = await api<LeadChatResult>(`/leads/${lead.id}/conversation`, { body: { instanceId } });
+      const r = await api<LeadChatResult>(`/leads/${lead.id}/conversation`, {
+        body: { instanceId, sendAudio: true },
+      });
       rememberNumber(instanceId);
       actions.refresh();
       if (r.warning) toast(r.warning, { tone: 'warn', ms: 9000 });
+      if (r.audio?.sent) toast(`Áudio enviado: ${r.audio.label}`);
+      else if (r.audio?.reason === 'sem_audios')
+        toast('Conversa aberta. Nenhum áudio salvo para enviar — grave um em Áudios.', {
+          tone: 'warn',
+          ms: 9000,
+        });
+      else if (r.audio && !r.audio.sent)
+        toast('A conversa abriu, mas não consegui enviar o áudio. Grave um na hora.', {
+          tone: 'warn',
+          ms: 9000,
+        });
       onClose();
       navigate(`/conversas/${r.conversationId}`, { state: { fromLead: true } });
     } catch (err) {
@@ -159,6 +172,7 @@ function ChooseNumberDialog({ lead, onClose }: { lead: LeadItem; onClose: () => 
       ) : (
         <>
           <p className="eyebrow">Por qual número?</p>
+          <p className="sub">Ao escolher, o sistema envia um áudio salvo para o lead.</p>
           {!instances ? (
             <div className="num-loading">
               <span className="spinner" />

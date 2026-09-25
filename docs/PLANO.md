@@ -1,6 +1,6 @@
 # Central de WhatsApp: plano
 
-Status: **Fases 1 a 9 concluídas. Números por responsável e barra do celular fixa entregues, aguardando teste.**
+Status: **Fases 1 a 11 concluídas. Áudios do Chamar (Plano A) entregues, aguardando teste. Falta o backup e a subida para o VPS (o cliente avisa quando).**
 
 > A partir da Fase 8, a Central virou parte do **Chamador de Leads** (Fastify + Kysely). As seções 3, 4.1 a 4.6
 > descrevem como cada parte foi pensada; onde falam em Express, Prisma, `backend/`, `frontend/`, `node src/cli.ts` ou
@@ -123,7 +123,11 @@ Dependências previstas (mínimo):
 9. Botão **Chamar** do lead pelo sistema: escolher o número, conferir se o lead tem WhatsApp, abrir a conversa com o
    texto vazio (para gravar áudio na hora), marcar o resultado sozinho e mostrar os dados do lead no chat. Sai o link
    `wa.me` e saem as mensagens prontas.
-10. Ajustes, guia do VPS revisado e testes completos. Depois: backup e subida para o VPS.
+10. Ajustes, guia do VPS revisado e testes completos.
+11. **Áudios do Chamar (Plano A)**: biblioteca de áudios (várias versões da mesma mensagem); ao escolher o
+    número no botão Chamar, o sistema sorteia uma versão e a envia como mensagem de voz para o lead. Cada
+    envio continua sendo uma ação do atendente (não há disparo automático em massa). Depois: backup e subida
+    para o VPS.
 
 ## 4.1 Como a Fase 2 funciona
 
@@ -274,6 +278,23 @@ por número em `src/server/modules/whatsapp/realtime.ts`.
   conversas dele.
 - Quem pode: o responsável pelo número e o dono/administrador. O que foi apagado não volta com a reimportação de histórico.
 
+## 4.11 Áudios do Chamar (Plano A)
+
+- **Biblioteca de áudios** (tela **Áudios**, só dono e administrador): grava-se pelo microfone ou envia-se um
+  arquivo, com um nome. Guardam-se várias versões da mesma mensagem, de durações diferentes. Cada áudio pode ser
+  ligado/desligado (só os ligados entram no sorteio) e excluído. O arquivo fica na pasta de mídias
+  (`audios/<id>.<ext>`), como as outras mídias.
+- **Envio na hora do Chamar**: no botão **Chamar no WhatsApp**, ao escolher o número, o servidor confere se o lead
+  tem WhatsApp, abre a conversa e **sorteia um áudio ativo**, enviando-o como mensagem de voz. O sorteio evita
+  repetir o último áudio que aquele número mandou, para variar a mensagem entre os clientes. O lead é marcado
+  sozinho como "Mensagem enviada", como em qualquer envio pela conversa.
+- **Sem áudio salvo**: a conversa abre mesmo assim (vazia, para gravar na hora) e um aviso lembra de salvar um áudio.
+- **Cada envio é uma ação do atendente** (um clique por lead). Não há disparo automático em massa, nem rodízio
+  automático entre vários números, nem qualquer recurso para esconder a origem dos números ou driblar o WhatsApp.
+  Isso é decisão de projeto (ver decisão 10), não limitação técnica.
+- **Rota**: `POST /api/leads/:id/conversation` com `{ instanceId, sendAudio: true }` devolve, além da conversa, o
+  áudio sorteado (`audio: { sent, label, reason? }`). As telas usam `GET/POST/PATCH /api/audios…`.
+
 ## 5. Decisões tomadas
 
 1. **Histórico ao conectar um número**: importar o histórico recente que o WhatsApp envia ao conectar, só de
@@ -292,3 +313,11 @@ por número em `src/server/modules/whatsapp/realtime.ts`.
    prontas e sem link `wa.me` (Fase 9).
 9. **Números por responsável**: o atendente vê só as conversas dos números dele e pode cadastrar os próprios; dono,
    administrador e supervisor veem todas as conversas; dono e administrador escolhem o responsável de cada número.
+10. **Áudios do Chamar — Plano A, e não o disparo automático (Plano B)**: o cliente estudou dois caminhos. O Plano B
+    (campanha automática que dispara áudios em massa para as listas, com rodízio entre vários números e intervalos
+    para não tomar banimento) foi **descartado**: é envio em massa para quem não pediu, por uma via não oficial
+    (Evolution/Baileys), montado para driblar o sistema anti-spam do WhatsApp. Não construímos isso, nem proxy ou
+    qualquer disfarce da origem dos números. O escolhido foi o **Plano A**: o atendente clica em Chamar, escolhe o
+    número e o sistema envia **um** áudio sorteado da biblioteca para aquele lead. Cada envio é um clique de uma
+    pessoa. Para volume grande e sem risco de banimento, o caminho é a API oficial do WhatsApp Business (Meta), que
+    fica como possibilidade futura.

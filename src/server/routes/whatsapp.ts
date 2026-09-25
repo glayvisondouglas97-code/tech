@@ -16,6 +16,13 @@ import {
   manageableNumber,
   visibleNumbers,
 } from '../modules/whatsapp/access';
+import {
+  audioFileForPlayback,
+  createAudio,
+  deleteAudio,
+  listAudios,
+  setAudioActive,
+} from '../modules/whatsapp/audios';
 import { deleteConversations, deleteMessages, deleteNumber } from '../modules/whatsapp/deletion';
 import {
   conversationDto,
@@ -210,12 +217,16 @@ export async function whatsappRoutes(app: FastifyInstance) {
   };
 
   // Abre a conversa com o lead pelo número escolhido (confere antes se o lead tem WhatsApp).
+  // Com sendAudio, sorteia um áudio salvo e o envia como mensagem de voz (Plano A).
   app.post('/leads/:id/conversation', async (req) => {
     const user = requireUser(req);
     requireWhatsapp();
     const leadId = parseLeadId((req.params as { id: string }).id);
-    const { instanceId } = parse(z.object({ instanceId: idSchema }), req.body ?? {});
-    return startLeadChat(db, user, leadId, instanceId);
+    const { instanceId, sendAudio } = parse(
+      z.object({ instanceId: idSchema, sendAudio: z.boolean().optional().default(false) }),
+      req.body ?? {},
+    );
+    return startLeadChat(db, user, leadId, instanceId, sendAudio);
   });
 
   // Conversas já abertas com o lead (a janela de escolha do número mostra por qual número já se falou).
@@ -231,6 +242,31 @@ export async function whatsappRoutes(app: FastifyInstance) {
       .orderBy('c.last_message_at', (ob) => ob.desc().nullsLast())
       .execute();
     return rows.map((r) => ({ id: r.id, instanceId: r.instance_id }));
+  });
+
+  // ---------- biblioteca de áudios (Plano A) ----------
+  // O dono e o administrador salvam as versões; o botão Chamar sorteia uma na hora do envio.
+
+  app.get('/audios', async (req) => listAudios(db, requireUser(req)));
+
+  app.patch('/audios/:id', async (req) => {
+    const user = requireUser(req);
+    const id = parseId((req.params as { id: string }).id);
+    const { active } = parse(z.object({ active: z.boolean() }), req.body ?? {});
+    return setAudioActive(db, user, id, active, req.ip);
+  });
+
+  app.post('/audios/:id/delete', async (req, reply) => {
+    const user = requireUser(req);
+    await deleteAudio(db, user, parseId((req.params as { id: string }).id), req.ip);
+    return reply.status(204).send();
+  });
+
+  app.get('/audios/:id/media', async (req, reply) => {
+    const user = requireUser(req);
+    const id = parseId((req.params as { id: string }).id);
+    const audio = await audioFileForPlayback(db, user, id);
+    return sendFile(req, reply, audio.path, audio.mime, null);
   });
 
   // ---------- conversas ----------
@@ -392,6 +428,26 @@ export async function whatsappRoutes(app: FastifyInstance) {
       if (!Buffer.isBuffer(req.body) || req.body.length === 0) throw badRequest('Arquivo vazio.');
       return { data: req.body, mime: baseMime(req.headers['content-type']) || 'application/octet-stream' };
     };
+
+    // Salva um áudio na biblioteca (arquivo no corpo; ?label=...&seconds=...). Sorteado depois pelo Chamar.
+    uploads.post('/audios', { bodyLimit: MAX_UPLOAD_BYTES }, async (req, reply) => {
+      const user = requireUser(req);
+      const file = uploadedFile(req);
+      const query = req.query as { label?: string; seconds?: string };
+      const seconds = Number(query.seconds);
+      const audio = await createAudio(
+        db,
+        user,
+        {
+          label: String(query.label ?? ''),
+          mime: file.mime,
+          seconds: Number.isFinite(seconds) ? seconds : null,
+          data: file.data,
+        },
+        req.ip,
+      );
+      return reply.status(201).send(audio);
+    });
 
     // Áudio gravado no navegador (WebM/MP4). Sai como mensagem de voz: a Evolution converte para OGG/Opus.
     uploads.post('/conversations/:id/audio', { bodyLimit: MAX_UPLOAD_BYTES }, async (req, reply) => {
