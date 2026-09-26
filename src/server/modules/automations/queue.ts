@@ -156,7 +156,6 @@ export async function reserveNext(
       endMin: campaign.window_end_min,
       limit,
       used,
-      seed: leadId,
     });
     if (!slot) return { kind: 'closed' };
 

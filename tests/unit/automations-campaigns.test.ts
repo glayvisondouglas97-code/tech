@@ -9,8 +9,10 @@ import {
 } from '../../src/server/modules/automations/validation';
 import {
   addDays,
+  FIRST_OF_DAY_SPREAD_SECONDS,
   insideWindow,
-  JITTER_SECONDS,
+  MAX_GAP_FACTOR,
+  MIN_GAP_FACTOR,
   nextWindowOpening,
   planSlot,
   spDate,
@@ -113,26 +115,59 @@ describe('janela de trabalho (10:00 às 16:00 por padrão)', () => {
 });
 
 describe('planSlot: espalha os envios pela janela', () => {
-  const base = { startMin: 600, endMin: 960, limit: 20, seed: 7 };
+  const base = { startMin: 600, endMin: 960, limit: 20 };
+  /** Sequência fixa de "sorteios" para os testes ficarem reprodutíveis sem depender do Math.random de verdade. */
+  const fakeRandom = (...values: number[]) => {
+    let i = 0;
+    return () => values[i++ % values.length] as number;
+  };
 
-  it('o primeiro do dia sai na abertura da janela (mais a pequena variação)', () => {
-    const slot = planSlot(at(8, 0), { ...base, used: 0 }) as Date;
-    expect(slot.getTime() - at(10).getTime()).toBe((7 % JITTER_SECONDS) * 1000);
+  it('o primeiro do dia sai perto da abertura da janela, com variação sorteada', () => {
+    const noSpread = planSlot(at(8, 0), { ...base, used: 0, random: fakeRandom(0) }) as Date;
+    expect(noSpread.getTime()).toBe(at(10).getTime());
+    const maxSpread = planSlot(at(8, 0), { ...base, used: 0, random: fakeRandom(1) }) as Date;
+    expect(maxSpread.getTime() - at(10).getTime()).toBe(FIRST_OF_DAY_SPREAD_SECONDS * 1000);
   });
 
   it('agendando com a janela já aberta, sai a partir de agora', () => {
     const now = at(11, 0);
-    const slot = planSlot(now, { ...base, used: 0 }) as Date;
+    const slot = planSlot(now, { ...base, used: 0, random: fakeRandom(0.4) }) as Date;
     expect(slot.getTime()).toBeGreaterThanOrEqual(now.getTime());
-    expect(slot.getTime() - now.getTime()).toBeLessThan(JITTER_SECONDS * 1000);
+    expect(slot.getTime() - now.getTime()).toBeLessThan(FIRST_OF_DAY_SPREAD_SECONDS * 1000);
   });
 
-  it('20 vagas em 6 horas: um envio a cada ~18 minutos, sempre dentro da janela e em ordem crescente', () => {
+  it('o fator de variação vai de MIN_GAP_FACTOR a MAX_GAP_FACTOR em torno da média', () => {
+    const now = at(11);
+    const used = 3;
+    const remaining = base.limit - used;
+    const meanGap = (at(16).getTime() - now.getTime()) / (remaining + 1);
+    const min = planSlot(now, { ...base, used, random: fakeRandom(0) }) as Date;
+    const max = planSlot(now, { ...base, used, random: fakeRandom(0.999999) }) as Date;
+    expect(min.getTime() - now.getTime()).toBeCloseTo(meanGap * MIN_GAP_FACTOR, -2);
+    expect(max.getTime() - now.getTime()).toBeCloseTo(meanGap * MAX_GAP_FACTOR, -2);
+    expect(max.getTime()).toBeGreaterThan(min.getTime());
+  });
+
+  it('sem "random" fixo (o caso de produção), cada chamada tende a sortear um intervalo diferente', () => {
+    const now = at(11);
+    const one = planSlot(now, { ...base, used: 3 }) as Date;
+    const two = planSlot(now, { ...base, used: 3 }) as Date;
+    // Math.random de verdade: praticamente impossível cair no mesmo milissegundo duas vezes.
+    expect(one.getTime()).not.toBe(two.getTime());
+  });
+
+  it('20 vagas em 6 horas: nunca o mesmo intervalo duas vezes, sempre dentro da janela e em ordem crescente', () => {
     let now = at(10);
     let previous = 0;
     const gaps: number[] = [];
+    // Sequência determinística que passeia entre os extremos do sorteio, para o teste ser reprodutível.
+    const draws = [0.05, 0.9, 0.2, 0.75, 0.5, 0.95, 0.1, 0.6, 0.3, 0.85];
     for (let used = 0; used < 20; used++) {
-      const slot = planSlot(now, { ...base, used, seed: used + 1 }) as Date;
+      const slot = planSlot(now, {
+        ...base,
+        used,
+        random: fakeRandom(draws[used % draws.length] as number),
+      }) as Date;
       expect(slot, `vaga ${used + 1}`).not.toBeNull();
       expect(slot.getTime(), `vaga ${used + 1} depois da anterior`).toBeGreaterThanOrEqual(previous);
       expect(insideWindow(slot, 600, 960), `vaga ${used + 1} dentro da janela`).toBe(true);
@@ -140,11 +175,10 @@ describe('planSlot: espalha os envios pela janela', () => {
       previous = slot.getTime();
       now = slot; // o envio acontece no horário marcado; a próxima reserva parte dali
     }
-    // A última sai antes do fim da janela (não no último segundo) e o espaçamento é de vários minutos.
-    expect(previous).toBeLessThan(at(16).getTime() - 60_000);
-    expect(Math.min(...gaps)).toBeGreaterThan(3);
-    // Os intervalos são parecidos entre si: nada de tudo junto no começo.
-    expect(previous - at(10).getTime()).toBeGreaterThan(4 * 3_600_000);
+    // A última sai antes do fim da janela (não no último segundo).
+    expect(previous).toBeLessThan(at(16).getTime());
+    // O espaçamento varia de verdade: o maior intervalo é bem mais que o dobro do menor.
+    expect(Math.max(...gaps)).toBeGreaterThan(Math.min(...gaps) * 2);
   });
 
   it('a janela de hoje fechou ou o número não tem mais vaga: não agenda (null)', () => {
@@ -155,26 +189,20 @@ describe('planSlot: espalha os envios pela janela', () => {
   });
 
   it('a última vaga nunca passa do fim da janela, mesmo agendada em cima da hora', () => {
-    const slot = planSlot(at(15, 59, 30), { ...base, used: 19 }) as Date;
+    const slot = planSlot(at(15, 59, 30), { ...base, used: 19, random: fakeRandom(0.999999) }) as Date;
     expect(slot.getTime()).toBeLessThan(at(16).getTime());
   });
 
-  it('a variação é DETERMINÍSTICA: mesma entrada, mesmo horário (nada de sorteio para "parecer humano")', () => {
-    const one = planSlot(at(11), { ...base, used: 3, seed: 12345 });
-    const two = planSlot(at(11), { ...base, used: 3, seed: 12345 });
-    expect(one?.toISOString()).toBe(two?.toISOString());
-    const other = planSlot(at(11), { ...base, used: 3, seed: 12346 });
-    expect(other?.toISOString()).not.toBe(one?.toISOString());
-    // A variação é pequena: no máximo JITTER_SECONDS.
-    const a = planSlot(at(11), { ...base, used: 3, seed: 0 }) as Date;
-    const b = planSlot(at(11), { ...base, used: 3, seed: JITTER_SECONDS - 1 }) as Date;
-    expect(b.getTime() - a.getTime()).toBe((JITTER_SECONDS - 1) * 1000);
-  });
-
   it('usa a janela recebida (13:00 às 14:00)', () => {
-    const slot = planSlot(at(8), { startMin: 780, endMin: 840, limit: 5, used: 0, seed: 0 }) as Date;
+    const slot = planSlot(at(8), {
+      startMin: 780,
+      endMin: 840,
+      limit: 5,
+      used: 0,
+      random: fakeRandom(0),
+    }) as Date;
     expect(slot.toISOString()).toBe(at(13).toISOString());
-    expect(planSlot(at(14), { startMin: 780, endMin: 840, limit: 5, used: 0, seed: 0 })).toBeNull();
+    expect(planSlot(at(14), { startMin: 780, endMin: 840, limit: 5, used: 0 })).toBeNull();
   });
 });
 

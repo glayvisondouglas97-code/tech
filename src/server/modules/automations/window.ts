@@ -154,19 +154,28 @@ export function scheduleOf(row: {
   };
 }
 
-/** Variação (em segundos, no máximo) somada ao horário de cada envio, para dois envios não caírem no mesmo segundo. */
-export const JITTER_SECONDS = 45;
+/**
+ * O espaçamento varia entre metade e uma vez e meia da média (20 vagas em 6 horas → média de ~18 min, mas cada
+ * envio de fato sai entre ~9 e ~27 min do anterior): larga o bastante para o intervalo nunca parecer o mesmo padrão
+ * se repetindo o dia inteiro.
+ */
+export const MIN_GAP_FACTOR = 0.5;
+export const MAX_GAP_FACTOR = 1.5;
+
+/** Variação (em segundos, no máximo) do primeiro envio do dia, para não sair sempre cravado na abertura da janela. */
+export const FIRST_OF_DAY_SPREAD_SECONDS = 90;
 
 /**
  * Quando o próximo lead de um número deve ser enviado. As vagas que sobram no dia são espalhadas pelo tempo que
- * resta da janela, em intervalos iguais (20 vagas em 6 horas = um envio a cada ~18 minutos), em vez de
- * despejar tudo no começo. O primeiro do dia sai na abertura da janela. A pequena variação é DETERMINÍSTICA
- * (vem do `seed`, por exemplo o id do lead): só evita horários idênticos, não tenta imitar comportamento humano.
+ * resta da janela, mas cada intervalo sai de um sorteio (`random`, `Math.random` por padrão — nos testes, troque por
+ * uma função fixa) em vez de uma divisão igual: assim o espaçamento entre dois envios muda a cada vez, sem deixar de
+ * caber todas as vagas do dia (o cálculo é refeito a cada nova reserva, com o tempo e as vagas que realmente
+ * restam). O primeiro do dia sai perto da abertura da janela, com uma pequena variação também sorteada.
  * Devolve null se a janela de hoje já fechou ou se o número não tem mais vagas hoje.
  */
 export function planSlot(
   now: Date,
-  o: { startMin: number; endMin: number; limit: number; used: number; seed: number },
+  o: { startMin: number; endMin: number; limit: number; used: number; random?: () => number },
 ): Date | null {
   const t = spTime(now);
   if (t.minutes >= o.endMin) return null;
@@ -175,9 +184,17 @@ export function planSlot(
   const open = spInstant(t.date, o.startMin);
   const close = spInstant(t.date, o.endMin);
   const from = now.getTime() > open.getTime() ? now : open;
-  const jitter = (Math.abs(o.seed) % JITTER_SECONDS) * 1000;
+  const random = o.random ?? Math.random;
+  const latest = close.getTime() - 1000; // nunca no último segundo da janela
+
+  if (o.used === 0) {
+    const spreadMs = Math.min(FIRST_OF_DAY_SPREAD_SECONDS * 1000, Math.max(0, latest - from.getTime()));
+    return new Date(from.getTime() + random() * spreadMs);
+  }
+
   // Divide por "vagas + 1": o último envio do dia cai antes do fim da janela, não no último segundo dela.
-  const gap = o.used === 0 ? 0 : (close.getTime() - from.getTime()) / (remaining + 1);
-  const slot = Math.min(from.getTime() + gap + jitter, close.getTime() - 1000);
+  const meanGap = (close.getTime() - from.getTime()) / (remaining + 1);
+  const factor = MIN_GAP_FACTOR + random() * (MAX_GAP_FACTOR - MIN_GAP_FACTOR);
+  const slot = Math.min(from.getTime() + meanGap * factor, latest);
   return new Date(Math.max(slot, from.getTime()));
 }
