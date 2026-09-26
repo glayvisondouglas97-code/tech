@@ -12,6 +12,9 @@ import { QueuePage } from './pages/QueuePage';
 const AccountPage = lazy(() => import('./pages/AccountPage').then((m) => ({ default: m.AccountPage })));
 const AudiosPage = lazy(() => import('./pages/AudiosPage').then((m) => ({ default: m.AudiosPage })));
 const AuditPage = lazy(() => import('./pages/AuditPage').then((m) => ({ default: m.AuditPage })));
+const AutomationsPage = lazy(() =>
+  import('./pages/AutomationsPage').then((m) => ({ default: m.AutomationsPage })),
+);
 const CalledPage = lazy(() => import('./pages/CalledPage').then((m) => ({ default: m.CalledPage })));
 const ConversationsPage = lazy(() =>
   import('./pages/ConversationsPage').then((m) => ({ default: m.ConversationsPage })),
@@ -103,6 +106,14 @@ export function App() {
             element={
               <Protected perm="manageAudios">
                 <AudiosPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/automacoes/:id?"
+            element={
+              <Protected perm="manageAutomations">
+                <AutomationsPage />
               </Protected>
             }
           />

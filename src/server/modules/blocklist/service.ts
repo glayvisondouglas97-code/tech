@@ -5,6 +5,7 @@ import type { Database } from '../../db/schema';
 import { audit, maskPhone } from '../../lib/audit';
 import { badRequest, notFound } from '../../lib/errors';
 import { addEvents } from '../../lib/events';
+import { cancelRunsForBlockedLeads } from '../automations/runs';
 import { displayPhone, normalizePhones } from '../imports/phone';
 
 type Db = Kysely<Database>;
@@ -51,6 +52,11 @@ export async function blockPhone(
       type: 'bloqueado',
       data: { motivo: reason || 'Pediu para não ser contatado' },
     })),
+  );
+  // Automações: lead em "não contatar" não recebe mais nada, mesmo com uma sequência em andamento.
+  await cancelRunsForBlockedLeads(
+    db,
+    affected.rows.map((r) => r.id),
   );
   await audit(db, {
     userId: user?.id ?? null,

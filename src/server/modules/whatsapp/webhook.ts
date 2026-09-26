@@ -2,6 +2,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Kysely } from 'kysely';
 import type { Database } from '../../db/schema';
+import { cancelRunsOnReply } from '../automations/runs';
 import { markRepliedFromChat } from '../leads/service';
 import { scheduleHistoryImport } from './history';
 import { isRecentlyDeleted } from './instances';
@@ -39,6 +40,14 @@ export async function handleEvolutionEvent(
         // O lead chamado pelo sistema respondeu: o resultado dele passa sozinho para "Respondeu".
         if (saved && !saved.message.from_me && saved.conversation.lead_id) {
           const leadId = saved.conversation.lead_id;
+          // Automações: o lead respondeu, então as participações DELE neste número são canceladas na hora
+          // (sem esperar o job). Antes de qualquer outra coisa: se algo abaixo falhar, o cancelamento já valeu.
+          await cancelRunsOnReply(db, leadId, saved.conversation.instance_id).catch((error) =>
+            console.error(
+              `[webhook] não foi possível cancelar as automações do lead ${leadId}:`,
+              (error as Error).message,
+            ),
+          );
           const text = saved.message.text ?? saved.conversation.last_message_preview;
           const marked = await markRepliedFromChat(db, leadId, text).catch((error) => {
             console.error(`[webhook] não foi possível marcar o lead ${leadId}:`, (error as Error).message);

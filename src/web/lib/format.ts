@@ -49,6 +49,12 @@ export function fmtDate(iso: string | null | undefined): string {
   return iso ? dmyFmt.format(new Date(iso)) : '';
 }
 
+/** "2026-10-01" (data do calendário, sem hora) → "01/10/2026". Não passa por `Date`: nunca escorrega de dia. */
+export function fmtYmd(ymd: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd ?? '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
+
 export function fmtDayShort(ymd: string): { label: string; weekday: string } {
   const d = new Date(`${ymd}T12:00:00-03:00`);
   return { label: dmFmt.format(d), weekday: weekdayFmt.format(d).replace('.', '') };

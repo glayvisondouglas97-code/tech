@@ -1,5 +1,6 @@
 /** Envio pelo mesmo número da conversa (texto, áudio e arquivos) e marcação de lidas no WhatsApp. */
 import type { Kysely } from 'kysely';
+import { INSTANCE_DAILY_CONTACT_LIMIT } from '../../../shared/quota';
 import type { Database, WaInstance, WaMessage } from '../../db/schema';
 import { AppError, conflict, notFound } from '../../lib/errors';
 import { markSentFromChat } from '../leads/service';
@@ -7,6 +8,19 @@ import { EvolutionError, evolution } from './evolution';
 import { holdMedia, storeMedia } from './media';
 import type { WaMessage as RawMessage } from './parse';
 import { enqueue } from './queue';
+import {
+  auditContactLimit,
+  checkInstanceDailyQuota,
+  claimContactQuota,
+  confirmContactQuota,
+  isFirstContact,
+  limitReachedError,
+  notifyUsageChanged,
+  type QuotaClaim,
+  quotaDate,
+  releaseContactQuota,
+  sendDefinitelyFailed,
+} from './quota';
 import { saveMessage, upsertInstance } from './store';
 
 /** Erro da Evolution vira aviso legível (502 = o problema está no WhatsApp/Evolution, não no pedido). */
@@ -30,15 +44,51 @@ export async function ensureConnected(db: Kysely<Database>, instance: WaInstance
   }
 }
 
+/** Quem está enviando e o que o envio deve (ou não) mexer além de mandar e gravar a mensagem. */
+export interface SendActor {
+  /** Quem da equipe enviou (guardado na mensagem). Vazio = envio automático, sem pessoa. */
+  userId: string | null;
+  /** Conversa de um lead chamado: a primeira mensagem marca o lead como "Chamado · Mensagem enviada". */
+  markLeadCalled: boolean;
+  /** Marca como lidas no WhatsApp as mensagens do contato que foram respondidas. */
+  markRead: boolean;
+  /**
+   * Uma PESSOA está enviando: se esta for a primeira mensagem da conversa de um lead (contato novo), ela usa uma vaga da
+   * cota diária do número (manual). A automação não usa isto: ela segura a própria vaga no executor (automático).
+   */
+  countsAsContact?: boolean;
+}
+
 /**
  * Envia pelo mesmo número da conversa, grava a mensagem (e o arquivo, se houver) e marca como lidas
  * no WhatsApp as mensagens do contato que foram respondidas. Se a conversa foi aberta pelo "Chamar"
  * de um lead da fila de quem enviou, o lead fica "Chamado · Mensagem enviada".
  */
-export async function sendToConversation(
+export function sendToConversation(
   db: Kysely<Database>,
   conversationId: number,
   userId: string,
+  send: (instanceName: string, number: string) => Promise<RawMessage>,
+  media?: { data: Buffer; mime: string },
+): Promise<WaMessage> {
+  return sendAndStore(
+    db,
+    conversationId,
+    { userId, markLeadCalled: true, markRead: true, countsAsContact: true },
+    send,
+    media,
+  );
+}
+
+/**
+ * O miolo do envio, usado pelo atendente (`sendToConversation`) e pelas automações. Confere o número,
+ * envia pela Evolution e grava a mensagem na conversa. O que mais acontece depende de `actor`: a automação
+ * não marca o lead como chamado, não mexe na fila de ninguém e não marca as mensagens do lead como lidas.
+ */
+export async function sendAndStore(
+  db: Kysely<Database>,
+  conversationId: number,
+  actor: SendActor,
   send: (instanceName: string, number: string) => Promise<RawMessage>,
   media?: { data: Buffer; mime: string },
 ): Promise<WaMessage> {
@@ -60,9 +110,55 @@ export async function sendToConversation(
 
   await ensureConnected(db, instance);
 
-  const sent = await send(instance.name, number).catch((error) =>
-    evolutionFailure(error, 'Não foi possível enviar'),
-  );
+  // Contato novo feito por uma pessoa (botão Chamar ou primeira mensagem digitada para um lead): segura a vaga do dia
+  // do número ANTES de enviar. Cota cheia = não envia. O mesmo mecanismo protege as campanhas (ver quota.ts).
+  let claim: QuotaClaim | null = null;
+  if (actor.countsAsContact && conversation.lead_id !== null && (await isFirstContact(db, conversation.id))) {
+    const date = quotaDate();
+    claim = await claimContactQuota(db, instance.id, date);
+    if (!claim) {
+      const { usage } = await checkInstanceDailyQuota(db, instance.id, date);
+      await auditContactLimit(db, {
+        instanceId: instance.id,
+        usage,
+        origin: 'manual',
+        situation: 'recusado',
+        userId: actor.userId,
+      }).catch(() => {});
+      throw limitReachedError();
+    }
+  }
+
+  let sent: RawMessage;
+  try {
+    sent = await send(instance.name, number);
+  } catch (error) {
+    // Só a recusa clara devolve a vaga; qualquer dúvida sobre a mensagem ter saído mantém a vaga ocupada.
+    if (claim && sendDefinitelyFailed(error)) {
+      await releaseContactQuota(db, claim).catch((e) =>
+        console.error('[cota] não devolveu a vaga:', (e as Error).message),
+      );
+      notifyUsageChanged(instance.id);
+    }
+    return evolutionFailure(error, 'Não foi possível enviar');
+  }
+  if (claim) {
+    // O envio foi aceito: a vaga incerta vira contato manual. Falha aqui deixa a vaga como incerta (conservador).
+    const usage = await confirmContactQuota(db, claim, 'manual').catch((e) => {
+      console.error('[cota] não confirmou o contato:', (e as Error).message);
+      return null;
+    });
+    if (usage && usage.total >= INSTANCE_DAILY_CONTACT_LIMIT) {
+      await auditContactLimit(db, {
+        instanceId: instance.id,
+        usage,
+        origin: 'manual',
+        situation: 'atingido',
+        userId: actor.userId,
+      }).catch(() => {});
+    }
+    notifyUsageChanged(instance.id);
+  }
 
   // Se for arquivo, quem pedir a mídia antes da gravação terminar espera por ela (ver holdMedia).
   let stored: { resolve: (m: WaMessage) => void; reject: (e: unknown) => void } | undefined;
@@ -89,10 +185,10 @@ export async function sendToConversation(
         .where('wa_id', '=', sent.key.id)
         .executeTakeFirstOrThrow());
     // Registra quem da equipe enviou.
-    if (message.sent_by !== userId) {
+    if (actor.userId && message.sent_by !== actor.userId) {
       message = await db
         .updateTable('wa_messages')
-        .set({ sent_by: userId })
+        .set({ sent_by: actor.userId })
         .where('id', '=', message.id)
         .returningAll()
         .executeTakeFirstOrThrow();
@@ -102,7 +198,8 @@ export async function sendToConversation(
       stored?.resolve(message);
     }
 
-    if (conversation.lead_id) {
+    if (actor.markLeadCalled && actor.userId && conversation.lead_id) {
+      const userId = actor.userId;
       await markSentFromChat(db, conversation.lead_id, userId, instance.nickname ?? instance.name).catch(
         (error) =>
           console.error(
@@ -112,12 +209,15 @@ export async function sendToConversation(
       );
     }
 
-    markRepliedAsRead(db, instance.name, conversation.id, conversation.phone_jid, message.id).catch((error) =>
-      console.error(
-        `[envio] não foi possível marcar como lida a conversa ${conversation.id}:`,
-        (error as Error).message,
-      ),
-    );
+    if (actor.markRead) {
+      markRepliedAsRead(db, instance.name, conversation.id, conversation.phone_jid, message.id).catch(
+        (error) =>
+          console.error(
+            `[envio] não foi possível marcar como lida a conversa ${conversation.id}:`,
+            (error as Error).message,
+          ),
+      );
+    }
     return message;
   } catch (error) {
     stored?.reject(error);

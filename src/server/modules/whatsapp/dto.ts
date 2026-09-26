@@ -1,12 +1,14 @@
 /** Formato dos dados enviados ao navegador (pela API e pelo tempo real). */
-import type { Kysely } from 'kysely';
+import { type Kysely, sql } from 'kysely';
 import type {
   ChatMessage,
   ChatMessageType,
   ConversationItem,
   InstanceInfo,
 } from '../../../shared/conversations';
+import { usageOf } from '../../../shared/quota';
 import type { Database, WaInstance, WaMessage } from '../../db/schema';
+import { spDate } from '../automations/window';
 
 const phoneOf = (jid: string | null) => (jid ? (jid.split('@')[0] ?? null) : null);
 const iso = (d: Date | string) => (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
@@ -14,16 +16,36 @@ const iso = (d: Date | string) => (d instanceof Date ? d.toISOString() : new Dat
 /** Nome do lead como aparece no Chamador: a empresa ou, sem empresa, o sócio. */
 const leadLabel = (company: string | null, name: string | null) => company || name || 'Lead sem nome';
 
-/** Números com o nome do responsável. */
+/**
+ * Números com o nome do responsável e o uso de HOJE (dia de São Paulo) da cota de contatos. O uso vem do banco
+ * (`wa_instance_daily_usage`): a tela nunca calcula sozinha.
+ */
 export function instancesQuery(db: Kysely<Database>) {
   return db
     .selectFrom('wa_instances as i')
     .leftJoin('users as u', 'u.id', 'i.owner_id')
+    .leftJoin('wa_instance_daily_usage as d', (join) =>
+      join
+        .onRef('d.instance_id', '=', 'i.id')
+        .on(sql<boolean>`d.usage_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date`),
+    )
     .selectAll('i')
-    .select('u.name as owner_name');
+    .select([
+      'u.name as owner_name',
+      'd.manual_contacts as usage_manual',
+      'd.automatic_contacts as usage_automatic',
+      'd.uncertain_contacts as usage_uncertain',
+    ]);
 }
 
-export function instanceDto(i: WaInstance & { owner_name?: string | null }): InstanceInfo {
+export function instanceDto(
+  i: WaInstance & {
+    owner_name?: string | null;
+    usage_manual?: number | null;
+    usage_automatic?: number | null;
+    usage_uncertain?: number | null;
+  },
+): InstanceInfo {
   return {
     id: i.id,
     name: i.name,
@@ -31,6 +53,10 @@ export function instanceDto(i: WaInstance & { owner_name?: string | null }): Ins
     phone: phoneOf(i.phone_jid),
     status: i.status,
     owner: i.owner_id ? { id: i.owner_id, name: i.owner_name ?? 'Usuário removido' } : null,
+    usage: usageOf(
+      { manual: i.usage_manual ?? 0, automatic: i.usage_automatic ?? 0, uncertain: i.usage_uncertain ?? 0 },
+      spDate(new Date()),
+    ),
   };
 }
 

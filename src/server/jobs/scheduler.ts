@@ -1,16 +1,22 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { sql } from 'kysely';
 import type { Db } from '../db';
+import { runAutomationCycle } from '../modules/automations/executor';
+import { advanceCampaigns } from '../modules/automations/queue';
+import { CYCLE_SECONDS } from '../modules/automations/schedule';
 import { recoverStaleImports } from '../modules/imports/service';
 import { releaseLeads } from '../modules/leads/service';
 import { getSettings } from '../modules/settings/service';
+import { publishCampaignChange } from '../modules/whatsapp/realtime';
 
 const JOB_LOCK = 720_002;
+/** Trava própria das automações: um envio lento não segura a limpeza nem a devolução de leads (e vice-versa). */
+const AUTOMATION_LOCK = 720_003;
 
 /** Roda a tarefa só em um servidor por vez (se houver mais de um). */
-async function exclusive(db: Db, fn: () => Promise<void>): Promise<void> {
+async function exclusive(db: Db, fn: () => Promise<void>, lock = JOB_LOCK): Promise<void> {
   await db.transaction().execute(async (trx) => {
-    const r = await sql<{ ok: boolean }>`SELECT pg_try_advisory_xact_lock(${JOB_LOCK}) AS ok`.execute(trx);
+    const r = await sql<{ ok: boolean }>`SELECT pg_try_advisory_xact_lock(${lock}) AS ok`.execute(trx);
     if (r.rows[0]?.ok) await fn();
   });
 }
@@ -57,24 +63,55 @@ export async function cleanup(db: Db): Promise<void> {
 }
 
 export function startJobs(db: Db, log: FastifyBaseLogger): () => void {
-  const run = (name: string, fn: () => Promise<unknown>) => () => {
-    exclusive(db, async () => {
-      await fn();
-    }).catch((err) => log.error({ err }, `tarefa ${name} falhou`));
-  };
+  const run =
+    (name: string, fn: () => Promise<unknown>, lock = JOB_LOCK) =>
+    () => {
+      exclusive(
+        db,
+        async () => {
+          await fn();
+        },
+        lock,
+      ).catch((err) => log.error({ err }, `tarefa ${name} falhou`));
+    };
   const expire = run('expirar-leads', async () => {
     const n = await expireStaleLeads(db);
     if (n) log.info(`${n} leads parados voltaram para a fila livre`);
   });
   const clean = run('limpeza', () => cleanup(db));
+  // Automações: UM job para todas (nada de timer por lead ou por etapa). Procura as participações vencidas
+  // no PostgreSQL e atende um lote por ciclo. Sem Evolution configurada, o ciclo não faz nada.
+  const automations = run(
+    'automacoes',
+    async () => {
+      // Primeiro a fila das campanhas (reserva os próximos leads), depois o executor (envia o que venceu).
+      const reserved = await advanceCampaigns(db);
+      if (reserved.reserved || reserved.finished) {
+        log.info(`campanhas: ${reserved.reserved} lead(s) reservado(s), ${reserved.finished} encerrada(s)`);
+      }
+      const r = await runAutomationCycle(db);
+      // As telas abertas das campanhas que mudaram neste ciclo atualizam (uma vez por campanha, não uma por lead).
+      await publishCampaignChange([...new Set([...reserved.campaignIds, ...r.campaignIds])]);
+      if (r.claimed) {
+        log.info(
+          `automações: ${r.sent} enviada(s), ${r.skipped} pulada(s), ${r.cancelled} cancelada(s), ${r.failed} com falha, ${r.completed} concluída(s)`,
+        );
+      }
+    },
+    AUTOMATION_LOCK,
+  );
   const t1 = setInterval(expire, 5 * 60_000);
   const t2 = setInterval(clean, 60 * 60_000);
+  const t3 = setInterval(automations, CYCLE_SECONDS * 1000);
   setTimeout(expire, 20_000).unref();
   setTimeout(clean, 60_000).unref();
+  setTimeout(automations, 15_000).unref();
   t1.unref();
   t2.unref();
+  t3.unref();
   return () => {
     clearInterval(t1);
     clearInterval(t2);
+    clearInterval(t3);
   };
 }

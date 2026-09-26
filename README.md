@@ -195,14 +195,287 @@ Em **Áudios** (no menu; só o dono e o administrador), você monta a biblioteca
 1. Clique em **Salvar áudio**, dê um nome (ex.: `Apresentação — 20s`) e **grave pelo microfone** ou **escolha um
    arquivo** já pronto. Ouça a prévia e clique em **Salvar áudio**.
 2. Salve **várias versões da mesma mensagem**, de durações diferentes. Ao chamar um lead, o sistema **sorteia** uma
-   delas — assim não vai sempre o mesmo áudio para todos os clientes. O sorteio evita repetir o último áudio que aquele
-   número mandou.
+   delas — assim não vai sempre o mesmo áudio para todos os clientes. O sorteio é um **rodízio guardado no banco**: todos os
+   áudios ativos saem uma vez antes de qualquer um repetir, e o mesmo áudio nunca sai duas vezes seguidas por número
+   (continua de onde parou mesmo se o servidor reiniciar).
 3. Cada áudio tem um interruptor **No sorteio / Desligado** (o desligado fica guardado, mas não é enviado) e um botão
    para **excluir**. As mensagens já enviadas às conversas continuam lá.
 
-> **Importante:** cada envio é uma ação do atendente (um clique por lead). O sistema **não** faz disparo automático em
-> massa. Para enviar muitos áudios por dia sem risco de banimento, o caminho é a API oficial do WhatsApp Business (Meta),
-> que pode ser avaliada mais para frente.
+> **Importante:** o botão **Chamar** é sempre uma ação do atendente (um clique por lead). O envio automático em volume só
+> existe nas **campanhas** de uma automação (veja "Campanhas de automação" abaixo), com limites e riscos próprios. Para
+> enviar muitos áudios por dia sem risco de banimento, o caminho é a API oficial do WhatsApp Business (Meta), que pode
+> ser avaliada mais para frente.
+
+### Automações
+
+Em **Automações** (no menu; só o dono e o administrador) você monta sequências de mensagens para os leads. Cada
+automação tem um nome, uma descrição, um gatilho e uma lista de **etapas** em ordem:
+
+1. **Nova automação** → nome, descrição e **gatilho** (veja abaixo). Ela nasce como **Rascunho**.
+2. Dentro dela, **Adicionar etapa**: escolha **Enviar mensagem de texto** ou **Enviar áudio**, o **tempo de espera**
+   (segundos, minutos, horas ou dias; 0 = imediatamente, contado a partir do fim da etapa anterior), o texto (com as
+   variáveis `{{nome}}`, `{{empresa}}`, `{{telefone}}`, `{{atendente}}` e `{{numero}}`) ou o áudio (da biblioteca de
+   **Áudios**: um **áudio fixo** ou **Sortear entre os áudios ativos**, o rodízio descrito acima) e, se quiser,
+   **condições** (resultado do lead, se respondeu, situação do lead, lista do lead).
+3. Use **↑ / ↓** para reordenar e **Editar** / **Excluir** em cada etapa. Tudo é salvo no banco na hora.
+4. **Ativar** só funciona com pelo menos uma etapa e todas completas (texto escrito, áudio escolhido). **Pausar**
+   e **Arquivar** ficam no alto da tela. Automação arquivada fica só para consulta.
+
+> **Atenção: automação ATIVA envia mensagens de verdade** pelo WhatsApp, sem o atendente clicar em nada. Comece com
+> poucos leads, confira a Auditoria e use só com leads que podem ser contatados. Não há garantia de que o WhatsApp
+> aceite qualquer volume: número que manda mensagem demais pode ser bloqueado pelo WhatsApp.
+
+**Como uma automação começa (gatilhos)**
+
+- **Quando um lead for chamado:** depois de um **Chamar** bem-sucedido, isto é, o botão abriu a conversa **e a mensagem
+  inicial (o áudio sorteado) foi enviada**. A automação fala **pelo mesmo número que fez o Chamar**. Uma mensagem
+  digitada à mão na conversa **não** dispara nada. Se o Chamar não enviou nada (biblioteca de áudios vazia ou falha no
+  envio), a automação não começa. Chamar o mesmo lead de novo não repete a sequência (nem enquanto ela está andando,
+  nem depois de concluída).
+- **Manual:** `POST /api/automations/ID/run` com `{"leadId": 123, "instanceId": 2}` (um lead por pedido, sem disparo em
+  massa). A automação precisa estar ativa e ser do tipo manual, o número precisa estar conectado e acessível para
+  quem pede. Ainda não há botão para isso na tela. Para começar com **uma lista inteira**, use uma **campanha** (abaixo).
+- **Quando um lead for criado:** **ainda não está ligado.** Leads só nascem em importações de planilha (milhares de
+  uma vez), e disparar mensagens dali seria disparo em massa. Esse gatilho não pode ser ativado.
+
+**Como ela executa**
+
+- Um único job do servidor (a cada 10 segundos, junto dos outros jobs; desligado se `JOBS_ENABLED=false`) procura as
+  participações **vencidas** no PostgreSQL (`próxima etapa <= agora`) e atende **até 10 por ciclo, uma de cada vez**.
+  Não há timer por lead nem por etapa: se o servidor reiniciar, nada se perde, o job novo continua de onde parou.
+- Cada participação (`automation_runs`) guarda a etapa atual e **quando ela deve agir**. Ao enviar a etapa 1, o sistema
+  calcula a espera da etapa 2 a partir daquele momento, e assim por diante. Depois da última etapa, a participação fica
+  **Concluída**.
+- **Condições:** todas precisam valer (E). Se alguma não for atendida, a etapa é **pulada** (nada é enviado, e o motivo
+  fica no histórico) e a automação segue para a próxima. Etapa pulada não é falha.
+- **Variáveis:** trocadas pelos dados reais do lead na hora do envio. Se o dado estiver vazio, entra um texto neutro
+  (`cliente`, `sua empresa`, `nossa equipe`). Uma variável que não existe faz a etapa **falhar sem enviar**.
+- **Texto e áudio** saem pela mesma Evolution do resto do sistema e ficam gravados na conversa do lead, como qualquer
+  mensagem. A automação **não** marca o lead como chamado, não muda a fila e não dispara o gatilho de novo.
+- **Para sozinha (cancela)** quando: o **lead responde** (o webhook cancela na hora, só as participações daquele lead
+  **naquele número**), o telefone entra em **"não contatar"** (ou o lead pede para não ser contatado), o lead é
+  anonimizado, o número de WhatsApp é excluído ou a automação é **arquivada**. Automação **pausada** não envia nada e as
+  participações ficam esperando; ao ativar de novo, continuam. Lead excluído leva as participações junto.
+- **Número desconectado:** a participação espera (não é cancelada e não gasta o lote) até o número voltar.
+- Na tela da automação, **Execuções** mostra quantos leads estão em andamento, concluídos, cancelados ou com falha, e as
+  participações mais recentes com o motivo. Tudo também aparece na **Auditoria**.
+
+**Quando algo dá errado (sem reenviar às cegas)**
+
+- A tentativa de cada etapa é gravada **antes** de chamar a Evolution e só existe **uma por etapa**. Se a Evolution
+  **recusa** (erro 4xx) ou **não responde direito** (erro 5xx, demora, queda), a etapa vira **Falhou** e a participação
+  para. **O sistema não reenvia**: como a Evolution não confirma duplicidade, reenviar poderia mandar a mesma mensagem
+  duas vezes ao cliente. Só há nova tentativa quando se **sabe** que a mensagem não saiu (número desconectado), a cada
+  5 minutos, no máximo 3 vezes.
+- Se o servidor **cair no meio de um envio**, a participação fica "Enviando"; depois de 10 minutos ela é marcada como
+  **Falhou (executor interrompido)**. A mensagem **pode ou não** ter chegado ao cliente: confira a conversa antes de
+  qualquer ação manual.
+- Limite honesto: o sistema evita duplicar mensagens (uma participação por lead, uma tentativa por etapa, claim no
+  banco), mas **não há garantia de entrega "exatamente uma vez"**: se o servidor cair entre a Evolution aceitar a
+  mensagem e o sistema gravar o resultado, a mensagem sai e a etapa aparece como falha.
+
+### Campanhas de automação (envio automático para uma lista)
+
+Uma **campanha** inicia uma automação **ativa** para os leads de uma **lista**, sem ninguém clicar em Chamar: o que o
+atendente faz à mão (abrir a conversa e mandar o áudio) passa a ser feito pelo sistema, aos poucos, **em dias e horários que
+você define**. Só o dono e o administrador (permissão de automações) configuram e acompanham campanhas. Na tela da
+automação, **Nova campanha** pergunta:
+
+- a **lista** de leads e, se quiser, **filtros do público** (DDD, situação do lead, resultado, tipo de telefone, "chamado
+  antes"): só dados que o lead já tem, e a lista continua sendo a base;
+- os **números de WhatsApp** (só os conectados recebem leads; cada um mostra `14/20 hoje · disponível 6` ou **Limite diário
+  atingido**, e o desconectado fica fora do rodízio até voltar);
+- os **áudios**: a etapa de áudio usa a biblioteca de **Áudios**, sorteando entre os ativos sem repetir até usar todos;
+- o **horário de trabalho** (padrão **10:00 às 16:00**, horário de São Paulo) e os **dias da semana** (padrão **segunda a
+  sexta**);
+- **quando começar:** **Iniciar agora** ou **Agendar campanha** (uma data de início) e, se quiser, uma **data final**;
+- o **teto de contatos por número por dia** (padrão e máximo **20**; veja "Cota diária" abaixo) e o **cooldown** (padrão **24
+  horas**).
+
+Antes de seguir, a janela mostra a **prévia**, toda calculada pelo servidor: quantos leads há na lista e **quantos entram**,
+quantos ficam de fora e por quê (**bloqueados**, **sem WhatsApp**, **já participaram**, **em cooldown**, **fora dos
+filtros**), quantos números estão conectados, **quantos contatos novos ainda cabem hoje** (já descontados os contatos manuais
+e automáticos de hoje e os números que chegaram a 20/20), a capacidade por dia, uma **estimativa aproximada** de quantos
+dias de execução isso leva e um **calendário de capacidade** dos próximos 14 dias. Depois há um **resumo final**
+(Voltar / Cancelar / **Iniciar campanha** ou **Agendar campanha**). Só pode haver **uma campanha em andamento por
+automação**.
+
+> **Risco, dito sem enfeite:** mandar mensagem para muita gente que não pediu contato, por um número comum e por uma
+> ferramenta **não oficial** (a Evolution usa o WhatsApp Web), **pode levar o WhatsApp a restringir ou banir o número** e
+> pode violar os termos de uso do WhatsApp. O limite por dia, o horário de trabalho, os dias da semana e o rodízio de
+> números **diminuem o volume de cada número, mas não garantem** que ele não seja bloqueado. Nada aqui tenta enganar o
+> WhatsApp. Comece pequeno, com números que você pode perder, e acompanhe a Auditoria. Para volume alto, use a API oficial
+> (Meta).
+
+**Agenda (dias, horário e datas).** Tudo no calendário de **São Paulo**, sem depender do fuso do navegador.
+
+- **Horário:** vale de `início` até **antes** do `fim`. Das 10:00 às 16:00, um envio às 10:00 sai, às 15:59 sai e às 16:00
+  **não** sai. Fora do horário nada é reservado nem enviado.
+- **Dias da semana:** em dia não marcado (por exemplo sábado e domingo) nenhum contato novo é reservado nem enviado. Uma
+  etapa seguinte (acompanhamento) que cairia num dia não permitido, ou fora do horário, espera a **próxima janela válida**
+  (sexta às 15:30 + 1 hora vira segunda às 10:00). A virada de dia e de mês segue o calendário de São Paulo.
+- **Iniciar agora** fora do horário (ou num dia sem execução) **não envia na hora**: a campanha fica **Ativa**, esperando, e a
+  tela diz por quê e quando é a próxima janela (sexta às 18:30 → segunda às 10:00, se sábado e domingo não estão marcados).
+- **Agendar campanha:** a campanha fica **Agendada** até a data de início e nada é reservado, enviado ou gasto da cota antes
+  dela. "Agendada" não é um estado guardado: é uma campanha ativa cuja data inicial ainda não chegou, então nada precisa
+  "virar" quando o dia chega.
+- **Data final (inclusive):** depois dela **nenhum primeiro contato novo** sai; a campanha termina (**Concluída**, "a data
+  final passou"), o primeiro contato que ainda não tinha saído é cancelado e o histórico fica. Quem já recebeu o primeiro
+  contato continua recebendo as etapas seguintes até o fim da sequência. Sem data final, ela segue até acabarem os leads.
+- **Editar:** número, horário, dias, datas, cooldown, filtros e limite valem para os **próximos** leads; o que já foi enviado
+  e o histórico não mudam. A **lista** e a **data de início** só mudam antes de o primeiro lead entrar.
+
+**Quem entra na campanha (uma regra só).** A função `getCampaignEligibleLeads` decide, e a reserva do lead, a contagem, a
+prévia e o painel usam **a mesma**; nem a tela nem a fila repetem regra. Entra o lead da lista escolhida que: está na **fila
+livre** (pendente e sem atendente; "já chamado" só se você marcar), **não** foi anonimizado, **não** está em "não contatar",
+não tem resultado **Sem WhatsApp**, tem celular (telefone fixo só se você escolher), passa pelos **filtros**, a lista **não**
+está arquivada, **nunca** participou desta automação, **não** está no meio de outra campanha e **não** está em **cooldown**. Um
+lead **nunca entra duas vezes** (o banco impede, mesmo com dois processos ao mesmo tempo). A ordem é a do cadastro (menor id
+primeiro). Um lead que um atendente pegou depois de reservado sai da campanha, e o botão **Pegar leads** não entrega um lead
+que a campanha já reservou.
+
+**Cooldown.** Depois de um **primeiro contato automático** ter sido enviado, aquele lead não recebe uma **nova abordagem
+independente** (de outra campanha) antes de passar o cooldown (padrão 24 horas; 0 = sem cooldown). O cooldown **só vale para
+entrar no público**: as etapas seguintes da **mesma** execução nunca esperam por ele. Quem ainda não foi contatado (só está
+esperando a vez) não está em cooldown; mas quem está no meio de uma execução de outra campanha não é puxado por uma segunda ao
+mesmo tempo.
+
+**Como funciona.**
+
+- O **mesmo job** das automações (a cada 10 segundos) reserva, para cada número, **no máximo um lead por vez** e marca
+  **quando** ele será enviado. Uma lista de 100 mil leads **não** vira 100 mil linhas: só existe uma fila curta e sempre
+  atual. Não há timer por lead nem contador em memória: tudo (estado, quantos cada número já recebeu hoje, próximos
+  horários) fica no PostgreSQL. Se o servidor reiniciar, a campanha continua de onde parou.
+- **Qual número:** entre os conectados e com vaga hoje, o **menos usado** (contatos de hoje ÷ limite, **manuais e
+  automáticos somados**) vai primeiro; empate se resolve por sorteio. Número desconectado, **cheio (20/20)** ou excluído
+  **não recebe lead novo** e sai do rodízio; ao reconectar, volta ao rodízio. Um lead já reservado para um número que
+  **encheu antes do envio** só é passado para outro número com vaga **porque a mensagem ainda não saiu** (se nenhum tiver
+  vaga, espera o próximo dia de execução). Um envio que já começou nunca é movido para outro número.
+- **Limite por dia:** é a **cota diária do número** (abaixo): 20 contatos, somando o que foi feito à mão, pelas campanhas e
+  pelo gatilho manual. Reservar um lead **não** gasta cota; o que conta é o contato **realmente enviado**, no dia em que foi
+  enviado.
+- **Espaçamento:** os envios do dia são **espalhados** pela janela (20 envios em 6 horas = cerca de um a cada 18 minutos),
+  com uma variação pequena e **fixa** de até 45 segundos só para não cair tudo no mesmo segundo.
+- **Áudio:** o rodízio (um "saco embaralhado" guardado no banco) é **independente do número**: todos os áudios ativos saem
+  uma vez antes de qualquer um repetir, e o mesmo áudio nunca sai duas vezes seguidas. Áudio desligado ou excluído sai do
+  sorteio na hora. O áudio escolhido é gravado no histórico **antes** de o envio ir para a Evolution.
+- **Envio:** é o **mesmo executor** das automações e a mesma Evolution. O primeiro envio deixa o lead como **Chamado ·
+  Mensagem enviada** (sem atendente) e a conversa aparece em **Conversas**, no número que enviou. Se o telefone **não
+  tem WhatsApp**, o lead vira **Sem WhatsApp**, a campanha registra o motivo e segue para o próximo.
+- **Se o lead responder**, só a participação **dele** é cancelada; a campanha e os outros leads continuam.
+
+**Capacidade, estimativa e calendário.** A capacidade de **hoje** é a soma do que ainda cabe nos números **conectados**, com
+a cota já descontada (manuais e automáticos), e só existe se hoje é dia da campanha e a janela ainda não fechou. A de um dia
+**futuro** é `números conectados × limite por número` (não dá para saber quantos contatos manuais alguém fará). Exemplos: 1
+número = 20 por dia; 2 = 40; 3 = 60. A **estimativa** consome o público dia a dia, só nos dias em que a campanha executa, e
+diz "**Estimativa aproximada**": ela **não é uma data prometida**, porque depende de números que caem, de contatos manuais,
+de respostas e de leads que deixam de ser elegíveis. Se a data final não bastar, mostra quantos leads ficariam de fora.
+
+**Acompanhar e controlar.** A tela mostra a situação (**Agendada**, **Ativa**, **Pausada**, **Encerrada**, **Concluída**), o
+início, o fim, os dias, o horário e o cooldown, e os contadores **Elegíveis, Processados, Aguardando, Concluídos, Cancelados,
+Falharam, Sem WhatsApp, Bloqueados, Em cooldown, Sem cota hoje e Número desconectado**. Uma seção **"O que a campanha está
+esperando"** explica em palavras por que ela pode estar parada (fora do horário, dia sem execução, todos os números na
+cota, número desconectado, automação pausada). Há ainda o **uso de cada número hoje** (manuais e automáticos separados), o
+**calendário de capacidade**, os **próximos envios** (os horários vêm do servidor) e o **histórico**: para cada lead, a
+empresa, o número, o áudio, a data e a hora, a etapa, a situação e o motivo. No celular, cada lead vira um cartão. A tela
+se atualiza sozinha pelo **tempo real** (a mesma conexão Socket.io das conversas; o aviso leva só os ids e os dados vêm pela
+API) e, por garantia, refaz as consultas a cada 30 segundos (15 se o tempo real cair).
+
+- **Pausar:** nenhum lead novo é reservado e nenhum primeiro contato sai; as etapas seguintes esperam. As participações, o
+  histórico, a cota do dia e a agenda continuam gravados. **Retomar:** segue de onde parou, sem repetir lead nem reenviar; o
+  que venceu durante a pausa sai **um por minuto por número**, não de uma vez.
+- **Encerrar:** para de vez e não volta. Cancela os envios que ainda não saíram (inclusive as etapas seguintes de quem já
+  recebeu a primeira mensagem) e **mantém todo o histórico e as mensagens**. Quando os leads acabam, a campanha termina
+  sozinha (**Concluída**), o mesmo vale ao passar da data final. Arquivar a automação, arquivar ou excluir a lista também
+  encerram a campanha.
+- Pausar a **automação** também para a campanha: nada é reservado nem enviado até ela ser ativada de novo.
+
+**Auditoria:** iniciar, agendar, alterar, pausar, retomar e encerrar a campanha, cada lead que entra, cada lead ignorado,
+cada envio (com número e áudio) e cada número que bateu o limite ficam na **Auditoria**, sem nome nem telefone do lead.
+
+**Por API** (todas exigem a permissão de automações): `POST /api/automations/ID/campaigns/preview` (consulta: não cria nada),
+`POST /api/automations/ID/campaigns` (iniciar ou agendar), `GET /api/automations/ID/campaigns` e `…/campaigns/CAMPANHA`,
+`PATCH …/campaigns/CAMPANHA` (editar), `GET …/campaigns/CAMPANHA/stats` (contadores e explicações), `GET
+…/campaigns/CAMPANHA/calendar?days=14`, `POST …/campaigns/CAMPANHA/pause|resume|stop` e
+`GET /api/automations/ID/runs?campaignId=CAMPANHA` (histórico).
+
+**Limites que valem a pena saber:** o sistema não conhece as regras internas do WhatsApp; a Evolution não confirma
+duplicidade (por isso o envio nunca é repetido no escuro, veja "Quando algo dá errado"); o dia e o horário são sempre os de
+São Paulo; e a cota e a agenda são **controles operacionais**, não uma proteção contra bloqueio.
+
+### Cota diária de contatos por número (manual + automático)
+
+**Cada número de WhatsApp pode iniciar no máximo 20 contatos por dia, somando os contatos manuais e os automáticos.** Não são
+duas cotas: 20 automáticos + 20 manuais **não** viram 40 no mesmo número. Pode ser 7 manuais + 13 automáticos, 20 manuais
+e nenhum automático, 4 + 16, e assim por diante; ao chegar em **20/20** o número não inicia outro contato naquele dia.
+
+- **O que é um contato:** a **primeira mensagem** enviada a um lead por aquele número.
+  - **Manual:** a mensagem inicial do botão **Chamar** (o áudio sorteado) ou, se o Chamar não enviou nada, a primeira
+    mensagem que o atendente digita na conversa do lead. Continuar uma conversa que já tem mensagens, ou responder a quem
+    escreveu primeiro, **não** é contato novo e **não** é barrado pela cota.
+  - **Automático:** a primeira mensagem (etapa 1) de uma **campanha** e a primeira mensagem de uma execução pelo **gatilho
+    manual** (`POST /api/automations/ID/run`). As etapas seguintes (acompanhamento) não são contato novo. O gatilho manual é
+    **recusado** (409, "Este número já atingiu o limite de 20 contatos hoje.") quando o número está em 20/20 e, se a cota
+    encher entre criar a execução e enviar, a mensagem **não sai hoje** e espera o começo do dia seguinte.
+  - **Não consomem vaga:** abrir a conversa, conferir se o lead tem WhatsApp, escolher um lead, criar a participação,
+    **reservar** uma posição futura e as etapas seguintes de qualquer automação. O gatilho "**lead chamado**" também não é
+    contato novo: o Chamar que o disparou já foi contado como manual.
+- **O dia é o de São Paulo (`America/Sao_Paulo`).** A contagem é por número e por dia: no dia seguinte o número volta a
+  **0/20** sozinho, ninguém zera contador. Um lead reservado às 15:59 e enviado no dia seguinte gasta a cota do dia
+  seguinte, não a do dia da reserva.
+- **Quem manda no limite é o servidor.** Se o atendente tenta chamar por um número que está em 20/20, o sistema **não envia** e
+  responde: *"Este número já atingiu o limite de 20 contatos hoje."* Escolher o mesmo número de novo não contorna nada; outro
+  número, com a própria cota, continua funcionando.
+- **Onde ver:** em **Números** cada número mostra `14/20 contatos hoje` (manuais e automáticos) e **Limite diário atingido**
+  quando enche; na **campanha**, o uso de cada número e a capacidade que ainda cabe hoje.
+- **Horário, dia e cota são regras independentes:** para uma campanha enviar, **todas** precisam valer (dentro do horário de
+  trabalho, num dia da campanha **e** com vaga na cota).
+- **Como é protegido:** o uso fica no PostgreSQL (`wa_instance_daily_usage`, uma linha por número e dia), com uma trava do
+  próprio banco (`total ≤ 20`). A vaga é segurada de forma **atômica** antes do envio, então dois processos, dois workers, o
+  atendente e a campanha ao mesmo tempo nunca pegam a mesma última vaga. Nada fica em memória: reiniciar o servidor não zera
+  a contagem.
+- **Resultado incerto:** se a Evolution recusa claramente o envio (ou o número está desconectado), a vaga **volta**. Se o resultado
+  é incerto (erro do servidor, demora, queda), a vaga **fica ocupada como "incerta"** e a mensagem **não é reenviada às cegas**:
+  é melhor sobrar uma vaga sem uso do que passar do limite.
+- **Histórico:** por número e por dia o sistema guarda manuais, automáticos, incertos e o total. Os dias anteriores à
+  instalação **não** são reconstruídos; só o **dia da instalação** é (veja "Backfill do dia da instalação" logo abaixo).
+- **O que não é contado:** mensagens que alguém manda direto pelo celular, fora do sistema, porque o sistema só conta os
+  envios que ele mesmo faz.
+
+**Backfill do dia da instalação (migração `0015_backfill_cota_diaria`).** A cota só existe a partir da migração `0013`.
+Sem cuidado, um número que já tinha feito 14 contatos naquele dia apareceria como 0/20 logo depois de atualizar. Por isso a
+migração `0015` roda **uma vez**, ao atualizar, e reconstrói a cota **somente do dia em que ela é aplicada** (dia de São
+Paulo: do início do dia em `America/Sao_Paulo` até o início do dia seguinte, nunca `CURRENT_DATE` do banco). **Dias
+anteriores não são recalculados**: a estrutura antiga não garante que todo contato histórico possa ser classificado com
+segurança. Exemplo: um número com 7 contatos manuais e 5 automáticos naquele dia passa a mostrar **12/20** (7 manuais · 5
+automáticos, restam 8), e não 0/20.
+
+- **O que é contado** (só o *primeiro contato que o sistema iniciou com um lead*, com evidência estrutural no banco):
+  - **Manual:** mensagem enviada por uma **pessoa pelo sistema** (a mensagem guarda quem enviou), numa conversa **ligada a um
+    lead**, que é a **primeira mensagem da conversa** (nenhuma mensagem antes, nem recebida nem enviada): o Chamar com áudio ou
+    a primeira mensagem digitada para o lead.
+  - **Automático:** a mensagem da **primeira etapa** de uma execução de **campanha** ou do gatilho **manual** (`/run`),
+    concluída e ligada à execução pelo histórico da automação, numa conversa do mesmo lead.
+- **O que NÃO é contado** (é preferível subcontar a inventar): mensagens recebidas; respostas do lead; continuação de
+  conversa e mensagem manual numa conversa que já tinha mensagens; mensagens enviadas **direto pelo celular** (não dá para
+  saber se foram primeiro contato); etapas seguintes (acompanhamento) e o gatilho "lead chamado" (o Chamar que o disparou já
+  contou); conversas sem lead; mensagens de outros dias; qualquer mensagem sem lead identificável com segurança. Também não há
+  como distinguir uma mensagem de "teste" de uma real: se foi um primeiro contato pelo sistema, conta.
+- **Manual x automático:** separados só quando a evidência permite (mensagem de pessoa x etapa de automação). O que não puder
+  ser classificado fica **fora** da contagem, nunca é atribuído por palpite. Contatos **incertos** (`uncertain`) **não** são
+  estimados: o que já estiver gravado na linha do dia é mantido como está.
+- **Seguro para repetir:** a linha do dia é **recalculada**, não somada: manual e automático viram o maior entre o que já
+  estava gravado e o que o histórico prova, e o incerto é mantido. Rodar de novo dá o mesmo resultado. O total nunca passa de
+  20 (a trava do banco): se o histórico do dia tiver mais contatos que isso (de antes de existir limite), o número fica em
+  **20/20**, o resultado conservador.
+- **Limitações:** subconta, nunca inventa. Mensagens apagadas (pelo sistema ou pela LGPD), conversas de um número excluído, uma
+  pessoa da equipe excluída (a mensagem perde o autor) e mensagens mandadas pelo celular não entram; um histórico antigo
+  importado na mesma conversa pode fazer o primeiro contato deixar de parecer "primeiro". Nada disso é corrigido depois: o
+  backfill roda uma vez.
+
+> **Isto é controle operacional, não proteção.** O limite de 20 por dia **não garante** que o WhatsApp não restrinja ou bloqueie
+> um número, e o rodízio, o horário e o sorteio de áudio também não. Não há detecção de número bloqueado. O backfill só
+> evita começar o dia da instalação em 0/20; ele não muda essa limitação.
 
 ### Conversas (WhatsApp)
 

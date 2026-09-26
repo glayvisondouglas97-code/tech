@@ -11,11 +11,13 @@ import {
   IconTrash,
   IconX,
 } from '../components/Icons';
+import { QuotaMeter } from '../components/QuotaMeter';
 import { useToast } from '../components/Toasts';
 import { Dialog, Empty, Menu } from '../components/ui';
 import { QrDialog } from '../components/wa/QrDialog';
 import { api, errorMessage } from '../lib/api';
 import { plural } from '../lib/format';
+import { LIMIT_REACHED_LABEL, usageBreakdown } from '../lib/quota';
 import { useSession } from '../lib/session';
 import {
   formatPhone,
@@ -279,6 +281,24 @@ function NumberCard({
           </button>
         </form>
       )}
+
+      <div className="wa-num-usage" data-testid={`numero-uso-${instance.id}`}>
+        <div className="wa-num-usage-top">
+          <b data-testid={`numero-uso-total-${instance.id}`}>
+            {instance.usage.total}/{instance.usage.limit} contatos hoje
+          </b>
+          {instance.usage.limitReached && <span className="tag bad">{LIMIT_REACHED_LABEL}</span>}
+        </div>
+        <QuotaMeter
+          total={instance.usage.total}
+          limit={instance.usage.limit}
+          label={`Contatos de hoje: ${instanceLabel(instance)}`}
+        />
+        <span className="sub small">
+          {usageBreakdown(instance.usage)}
+          {instance.usage.limitReached ? ' · sem novos contatos até amanhã' : ''}
+        </span>
+      </div>
 
       <div className="wa-num-foot">
         <span className={`tag ${status.tone}`}>{status.label}</span>

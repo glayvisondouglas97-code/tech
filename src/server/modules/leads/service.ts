@@ -259,6 +259,9 @@ export async function pullLeads(
         SELECT l.id FROM leads l
         JOIN lists li ON li.id = l.list_id
         WHERE l.status = 'pendente' AND l.assigned_to IS NULL AND li.archived_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM automation_runs r
+            WHERE r.lead_id = l.id AND r.campaign_id IS NOT NULL AND r.status IN ('pending', 'running'))
           ${ddd ? sql`AND l.ddd = ${ddd}` : sql``}
         ORDER BY l.id
         LIMIT ${n}

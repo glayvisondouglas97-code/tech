@@ -157,6 +157,26 @@ export async function publishInstance(instanceId: number): Promise<void> {
 }
 
 /**
+ * Uma campanha mudou (criada, iniciada, pausada, retomada, encerrada, editada) ou teve participações atendidas: as telas da
+ * gestão (dono e administrador, a mesma sala de quem gerencia números) atualizam. Vão só os ids: os dados continuam vindo
+ * pela API, com a permissão de sempre.
+ */
+export async function publishCampaignChange(campaignIds: number[]): Promise<void> {
+  if (!campaignIds.length) return;
+  await safely('as campanhas', async () => {
+    if (!io || !database) return;
+    const rows = await database
+      .selectFrom('automation_campaigns')
+      .select(['id', 'automation_id'])
+      .where('id', 'in', campaignIds)
+      .execute();
+    for (const row of rows) {
+      io.to(MANAGERS).emit('campaign:updated', { automationId: row.automation_id, campaignId: row.id });
+    }
+  });
+}
+
+/**
  * O responsável de um número mudou: o novo passa a ver as conversas; o antigo (se não vê todos os
  * números) deixa de ver. As telas dos dois recarregam.
  */

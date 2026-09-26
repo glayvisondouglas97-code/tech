@@ -1,5 +1,7 @@
 /** Formatos do WhatsApp (números, conversas e mensagens) trocados entre o servidor e a interface. */
 
+import type { InstanceUsage } from './quota';
+
 export interface InstanceInfo {
   id: number;
   /** Nome técnico na Evolution (ex.: whatsapp-01). */
@@ -11,6 +13,8 @@ export interface InstanceInfo {
   status: string;
   /** Responsável pelo número (o atendente só vê as conversas dos números dele). */
   owner: { id: string; name: string } | null;
+  /** Contatos novos de hoje (manual + automático) contra o limite diário do número. Vem do servidor. */
+  usage: InstanceUsage;
 }
 
 export interface ConversationItem {

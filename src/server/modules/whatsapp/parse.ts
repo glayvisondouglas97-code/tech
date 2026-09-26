@@ -60,6 +60,20 @@ export function contactJids(key: WaKey): { phoneJid: string | null; lidJid: stri
   };
 }
 
+/**
+ * Identificadores do contato a partir da conferência da Evolution. O telefone volta com o 9º dígito
+ * certo (com ou sem); para quem só é conhecido pelo @lid, volta o @lid.
+ */
+export function contactJidsOf(check: { jid: string; number: string; lid?: string }, phone: string) {
+  const lidJid = [check.jid, check.lid].find((j) => typeof j === 'string' && j.endsWith('@lid')) ?? null;
+  const phoneJid = check.jid.endsWith('@s.whatsapp.net')
+    ? normalizeJid(check.jid)
+    : lidJid
+      ? null
+      : `${check.number || phone}@s.whatsapp.net`;
+  return { phoneJid, lidJid: lidJid ? normalizeJid(lidJid) : null };
+}
+
 // Tipos que não são conteúdo visível (edições, exclusões, votos etc.): ignorados.
 const IGNORED_TYPES = new Set([
   'protocolMessage',

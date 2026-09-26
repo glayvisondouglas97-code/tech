@@ -172,7 +172,10 @@ function ChooseNumberDialog({ lead, onClose }: { lead: LeadItem; onClose: () => 
       ) : (
         <>
           <p className="eyebrow">Por qual número?</p>
-          <p className="sub">Ao escolher, o sistema envia um áudio salvo para o lead.</p>
+          <p className="sub">
+            Ao escolher, o sistema envia um áudio salvo para o lead. Cada número inicia no máximo 20 contatos
+            por dia (manuais e automáticos somados).
+          </p>
           {!instances ? (
             <div className="num-loading">
               <span className="spinner" />
@@ -202,9 +205,15 @@ function ChooseNumberDialog({ lead, onClose }: { lead: LeadItem; onClose: () => 
                       <i aria-hidden="true" />
                       <span className="num-main">
                         <b>{instanceLabel(instance)}</b>
-                        <small>{instance.phone ? formatPhone(instance.phone) : 'Sem telefone'}</small>
+                        <small>
+                          {instance.phone ? formatPhone(instance.phone) : 'Sem telefone'} ·{' '}
+                          {instance.usage.total}/{instance.usage.limit} hoje
+                        </small>
                       </span>
                       {openedIds.has(instance.id) && <span className="tag info">Já conversou</span>}
+                      {ok && instance.usage.limitReached && !openedIds.has(instance.id) && (
+                        <span className="tag bad">Limite diário atingido</span>
+                      )}
                       {!ok && <span className="tag bad">Desconectado</span>}
                       {busyId === instance.id ? (
                         <span className="spinner num-spin" />

@@ -10,6 +10,8 @@ export interface FakeEvolution {
   missing: Set<string>;
   /** Números que a Evolution se recusa a excluir (responde 500). */
   undeletable: Set<string>;
+  /** Faz TODO envio (texto e áudio) responder com este erro (null = envio normal). */
+  failSends: { status: number; message: string } | null;
   close: () => Promise<void>;
 }
 
@@ -28,6 +30,7 @@ export async function startFakeEvolution(): Promise<FakeEvolution> {
   const closed = new Set<string>();
   const missing = new Set<string>();
   const undeletable = new Set<string>();
+  const control: { failSends: FakeEvolution['failSends'] } = { failSends: null };
   let n = 0;
   const sent = (number: string, message: Record<string, unknown>, messageType: string) => ({
     key: {
@@ -80,6 +83,10 @@ export async function startFakeEvolution(): Promise<FakeEvolution> {
       return json(200, { base64: 'data:image/png;base64,AAAA', count: 1 });
     if (url.startsWith('/webhook/set/') || url.startsWith('/settings/set/')) return json(201, {});
     if (url.startsWith('/chat/markMessageAsRead/')) return json(201, { message: 'Read messages' });
+    if (control.failSends && url.startsWith('/message/send')) {
+      const { status, message } = control.failSends;
+      return json(status, { status, error: 'Simulated', response: { message: [message] } });
+    }
     if (url.startsWith('/message/sendText/')) {
       if (String(body.number).startsWith('5511999990000'))
         return json(400, { status: 400, error: 'Bad Request', response: { message: [{ exists: false }] } });
@@ -105,6 +112,12 @@ export async function startFakeEvolution(): Promise<FakeEvolution> {
     closed,
     missing,
     undeletable,
+    get failSends() {
+      return control.failSends;
+    },
+    set failSends(value) {
+      control.failSends = value;
+    },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

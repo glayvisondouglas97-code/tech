@@ -23,6 +23,11 @@ export function configureEvolution(cfg: Config): void {
     : null;
 }
 
+/** O WhatsApp está configurado neste servidor (EVOLUTION_URL definido)? */
+export function isEvolutionConfigured(): boolean {
+  return settings !== null;
+}
+
 function current(): EvolutionSettings {
   if (!settings) throw new EvolutionError(503, 'WhatsApp não configurado (EVOLUTION_URL vazio)', 'config');
   return settings;

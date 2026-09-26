@@ -61,6 +61,11 @@ export const can = {
    * mas só o dono e o administrador montam a biblioteca.
    */
   manageAudios: isAdmin,
+  /**
+   * Criar, editar, pausar e arquivar automações. Como elas vão falar com os leads sem um clique do
+   * atendente, ficam com o dono e o administrador (como os áudios do Chamar).
+   */
+  manageAutomations: isAdmin,
 } satisfies Record<string, (r: Role) => boolean>;
 
 /** Papéis que cada papel pode criar e gerenciar. */

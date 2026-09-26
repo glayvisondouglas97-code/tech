@@ -1,0 +1,10 @@
+const fs = require('fs');
+const p = 'src/web/styles.css';
+let s = fs.readFileSync(p, 'utf8');
+const a = s.indexOf('.team {\n');
+const endMarker = '.team li.off {\n  opacity: 0.55;\n}\n';
+const b = s.indexOf(endMarker);
+if (a < 0 || b < 0) throw new Error('bloco .team não encontrado');
+s = s.slice(0, a) + s.slice(b + endMarker.length);
+fs.writeFileSync(p, s);
+console.log('removido', b + endMarker.length - a, 'caracteres');

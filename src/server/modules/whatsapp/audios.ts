@@ -3,7 +3,9 @@
  * mensagem; quando o atendente escolhe o número, o sistema sorteia uma versão ativa e a envia como
  * mensagem de voz para o lead. Assim não vai sempre o mesmo áudio para todos os clientes.
  */
+import { randomInt } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { sql } from 'kysely';
 import type { AudioItem } from '../../../shared/conversations';
 import { can } from '../../../shared/roles';
 import type { AuthUser } from '../../auth/sessions';
@@ -11,6 +13,7 @@ import type { Db } from '../../db';
 import type { WaAudio } from '../../db/schema';
 import { audit } from '../../lib/audit';
 import { badRequest, forbidden, notFound } from '../../lib/errors';
+import { shuffled } from '../../lib/shuffle';
 import { baseMime, extensionFor, mediaPathOf, removeMediaFiles, writeMediaFile } from './media';
 
 /** Só o dono e o administrador montam a biblioteca (todo mundo usa os áudios ao chamar). */
@@ -155,30 +158,64 @@ export async function audioFileForPlayback(
   return { path: mediaPathOf(row.media_path), mime: row.media_mime };
 }
 
-/** Último áudio enviado por cada número, para o sorteio evitar repetir o mesmo em seguida. */
-const lastAudioByInstance = new Map<number, number>();
+/** Um áudio da biblioteca pronto para enviar (o caminho já aponta para o arquivo no volume de mídias). */
+export interface AudioPick {
+  id: number;
+  label: string;
+  path: string;
+  mime: string;
+}
 
 /**
- * Sorteia um áudio ativo para enviar por um número. Evita repetir o último áudio que aquele número
- * enviou (quando há mais de uma opção), para variar a mensagem entre os clientes.
+ * Rodízio de áudios com "saco embaralhado" GUARDADO NO BANCO (`wa_audio_bags`, uma linha por escopo). Os áudios
+ * ativos são embaralhados e saem um de cada vez; só depois de sair todos o saco é embaralhado de novo, e o
+ * primeiro do saco novo nunca repete o último do anterior (quando há mais de um áudio). Com um áudio só, sai o único.
+ *
+ * - Só entram áudios ATIVOS e com arquivo. Áudio excluído ou desligado sai do saco na hora.
+ * - A linha do escopo fica travada (FOR UPDATE) até o fim da transação: dois workers ao mesmo tempo nunca
+ *   levam o mesmo "próximo áudio".
+ * - Sobrevive a reinício do Node e do Docker, e serve a vários processos.
+ *
+ * O escopo separa os rodízios: `campaign:<id>`, `automation:<id>` ou `instance:<id>` (o botão Chamar).
+ * PRECISA rodar dentro de uma transação (`pickAudio` abre uma quando ainda não há).
  */
-export async function pickAudioForInstance(
-  db: Db,
-  instanceId: number,
-): Promise<{ id: number; label: string; path: string; mime: string } | null> {
-  const audios = await db
+export async function pickAudioIn(tx: Db, scope: string): Promise<AudioPick | null> {
+  await tx
+    .insertInto('wa_audio_bags')
+    .values({ scope })
+    .onConflict((oc) => oc.column('scope').doNothing())
+    .execute();
+  const bag = await tx
+    .selectFrom('wa_audio_bags')
+    .selectAll()
+    .where('scope', '=', scope)
+    .forUpdate()
+    .executeTakeFirstOrThrow();
+  const active = await tx
     .selectFrom('wa_audios')
     .select(['id', 'label', 'media_path', 'media_mime'])
     .where('active', '=', true)
     .where('media_path', '<>', '')
+    .orderBy('id')
     .execute();
-  if (!audios.length) return null;
+  if (!active.length) return null;
 
-  const last = lastAudioByInstance.get(instanceId);
-  const pool = audios.length > 1 && last ? audios.filter((a) => a.id !== last) : audios;
-  const chosen = (pool.length ? pool : audios)[Math.floor(Math.random() * (pool.length || audios.length))];
-  if (!chosen) return null;
-  lastAudioByInstance.set(instanceId, chosen.id);
+  const activeIds = new Set(active.map((a) => a.id));
+  let remaining = bag.remaining.filter((id) => activeIds.has(id));
+  if (!remaining.length) {
+    remaining = shuffled(active.map((a) => a.id));
+    if (remaining.length > 1 && remaining[0] === bag.last_audio_id) {
+      const j = 1 + randomInt(remaining.length - 1);
+      [remaining[0], remaining[j]] = [remaining[j] as number, remaining[0] as number];
+    }
+  }
+  const [chosenId, ...rest] = remaining as [number, ...number[]];
+  await tx
+    .updateTable('wa_audio_bags')
+    .set({ remaining: rest, last_audio_id: chosenId, updated_at: sql`now()` })
+    .where('scope', '=', scope)
+    .execute();
+  const chosen = active.find((a) => a.id === chosenId) as (typeof active)[number];
   return {
     id: chosen.id,
     label: chosen.label,
@@ -186,6 +223,16 @@ export async function pickAudioForInstance(
     mime: chosen.media_mime,
   };
 }
+
+export const pickAudio = (db: Db, scope: string): Promise<AudioPick | null> =>
+  db.transaction().execute((tx) => pickAudioIn(tx, scope));
+
+/**
+ * Sorteia o áudio do botão Chamar para um número: o mesmo rodízio persistente das campanhas, com um saco por
+ * número. (Antes o "último áudio" ficava só na memória do processo e se perdia a cada reinício.)
+ */
+export const pickAudioForInstance = (db: Db, instanceId: number): Promise<AudioPick | null> =>
+  pickAudio(db, `instance:${instanceId}`);
 
 /** Lê os bytes de um áudio da biblioteca (para reenviar pela Evolution). */
 export function readAudioBytes(path: string): Promise<Buffer> {

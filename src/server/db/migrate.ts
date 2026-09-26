@@ -7,6 +7,14 @@ import * as m0004 from './migrations/0004_chamar_pelo_sistema';
 import * as m0005 from './migrations/0005_numeros_por_responsavel';
 import * as m0006 from './migrations/0006_exclusoes';
 import * as m0007 from './migrations/0007_audios';
+import * as m0008 from './migrations/0008_automacoes';
+import * as m0009 from './migrations/0009_automacoes_audio';
+import * as m0010 from './migrations/0010_automacoes_instancia';
+import * as m0011 from './migrations/0011_audio_sorteio';
+import * as m0012 from './migrations/0012_campanhas';
+import * as m0013 from './migrations/0013_cota_diaria_numeros';
+import * as m0014 from './migrations/0014_campanhas_agenda';
+import * as m0015 from './migrations/0015_backfill_cota_diaria';
 
 /** Lista fixa de migrações: funciona igual no código TypeScript e no build empacotado. */
 const migrations: Record<string, Migration> = {
@@ -17,6 +25,14 @@ const migrations: Record<string, Migration> = {
   '0005_numeros_por_responsavel': m0005,
   '0006_exclusoes': m0006,
   '0007_audios': m0007,
+  '0008_automacoes': m0008,
+  '0009_automacoes_audio': m0009,
+  '0010_automacoes_instancia': m0010,
+  '0011_audio_sorteio': m0011,
+  '0012_campanhas': m0012,
+  '0013_cota_diaria_numeros': m0013,
+  '0014_campanhas_agenda': m0014,
+  '0015_backfill_cota_diaria': m0015,
 };
 
 class StaticProvider implements MigrationProvider {

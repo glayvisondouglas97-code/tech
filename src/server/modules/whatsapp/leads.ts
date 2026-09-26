@@ -4,29 +4,23 @@ import type { LeadAudioResult, LeadChatResult } from '../../../shared/conversati
 import type { AuthUser } from '../../auth/sessions';
 import type { Database } from '../../db/schema';
 import { AppError } from '../../lib/errors';
+import { triggerLeadCalled } from '../automations/triggers';
 import { displayPhone } from '../imports/phone';
 import { leadForChat, markWhatsappOpened } from '../leads/service';
 import { visibleNumber } from './access';
 import { pickAudioForInstance, readAudioBytes } from './audios';
 import { evolution } from './evolution';
 import { ensureConnected, evolutionFailure, sendToConversation } from './messaging';
-import { normalizeJid } from './parse';
+import { contactJidsOf } from './parse';
 import { enqueue } from './queue';
+import {
+  auditContactLimit,
+  checkInstanceDailyQuota,
+  isFirstContact,
+  limitReachedError,
+  quotaDate,
+} from './quota';
 import { openLeadConversation } from './store';
-
-/**
- * Identificadores do contato a partir da conferência da Evolution. O telefone volta com o 9º dígito
- * certo (com ou sem); para quem só é conhecido pelo @lid, volta o @lid.
- */
-function contactJidsOf(check: { jid: string; number: string; lid?: string }, phone: string) {
-  const lidJid = [check.jid, check.lid].find((j) => typeof j === 'string' && j.endsWith('@lid')) ?? null;
-  const phoneJid = check.jid.endsWith('@s.whatsapp.net')
-    ? normalizeJid(check.jid)
-    : lidJid
-      ? null
-      : `${check.number || phone}@s.whatsapp.net`;
-  return { phoneJid, lidJid: lidJid ? normalizeJid(lidJid) : null };
-}
 
 /**
  * Confere se o número escolhido está conectado e se o lead tem WhatsApp, abre (ou reaproveita) a
@@ -62,10 +56,39 @@ export async function startLeadChat(
 
   const jids = contactJidsOf(check, lead.phone);
   const conversation = await enqueue(() => openLeadConversation(db, instance.id, jids, lead.id));
+
+  // Cota diária do número (manual + automático): conferida ANTES de enviar. Abrir a conversa não gasta vaga; a vaga é
+  // segurada, de forma atômica, no envio (`sendAndStore`). O backend é a autoridade: escolher o mesmo número de novo não
+  // contorna nada.
+  if (sendAudio && (await isFirstContact(db, conversation.id))) {
+    const { ok, usage } = await checkInstanceDailyQuota(db, instance.id, quotaDate());
+    if (!ok) {
+      await auditContactLimit(db, {
+        instanceId: instance.id,
+        usage,
+        origin: 'manual',
+        situation: 'recusado',
+        userId: user.id,
+      }).catch(() => {});
+      throw limitReachedError();
+    }
+  }
   const { warning } = await markWhatsappOpened(db, user, lead.id);
 
   const chat: LeadChatResult = { conversationId: conversation.id, warning };
   if (sendAudio) chat.audio = await sendLeadAudio(db, user, conversation.id, instance.id);
+  // Automações "quando um lead for chamado": só aqui, no "Chamar", e só se a mensagem inicial de fato saiu.
+  // Uma mensagem digitada à mão na conversa não passa por este ponto. Um erro da automação nunca derruba o "Chamar".
+  if (chat.audio?.sent) {
+    await triggerLeadCalled(db, {
+      leadId: lead.id,
+      instanceId: instance.id,
+      userId: user.id,
+      at: new Date(),
+    }).catch((error) =>
+      console.error('[chamar] não foi possível iniciar as automações:', (error as Error).message),
+    );
+  }
   return chat;
 }
 
@@ -93,6 +116,8 @@ async function sendLeadAudio(
     );
     return { sent: true, label: audio.label };
   } catch (error) {
+    // Cota cheia (corrida entre a conferência e o envio) é um erro para o atendente ver, não um "áudio não saiu".
+    if (error instanceof AppError && error.code === 'limite_numero') throw error;
     console.error(`[chamar] não foi possível enviar o áudio sorteado:`, (error as Error).message);
     return { sent: false, label: audio.label };
   }

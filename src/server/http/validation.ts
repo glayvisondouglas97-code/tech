@@ -37,6 +37,19 @@ const FIELD_NAMES: Record<string, string> = {
   note: 'Observação',
   listName: 'Nome da lista',
   phone: 'Telefone',
+  // automações
+  description: 'Descrição',
+  trigger: 'Gatilho',
+  actionType: 'Ação',
+  delaySeconds: 'Tempo de espera',
+  messageText: 'Mensagem',
+  audioId: 'Áudio',
+  position: 'Posição',
+  conditions: 'Condições',
+  field: 'Campo da condição',
+  operator: 'Operador da condição',
+  value: 'Valor da condição',
+  stepIds: 'Etapas',
 };
 
 export function zodMessage(err: ZodError): string {
