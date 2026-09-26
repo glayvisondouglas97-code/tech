@@ -1,1 +1,0 @@
-C:/Users/D7/Desktop/Leads/node_modules/@embedded-postgres/windows-x64/native/bin/postgres.exe "-D" "C:/Users/D7/Desktop/Leads/tests/.tmp/e2e-pg" "-p" "54330" "-c" "listen_addresses=127.0.0.1" "-c" "max_connections=200" "-c" "fsync=off" "-c" "synchronous_commit=off"
