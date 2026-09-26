@@ -110,13 +110,15 @@ export function App() {
             }
           />
           <Route
-            path="/automacoes/:id?"
+            path="/automacoes"
             element={
               <Protected perm="manageAutomations">
                 <AutomationsPage />
               </Protected>
             }
           />
+          {/* Endereços antigos do editor de automações (saiu do sistema): vão para a campanha automática. */}
+          <Route path="/automacoes/*" element={<Navigate to="/automacoes" replace />} />
           <Route
             path="/chamados"
             element={

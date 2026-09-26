@@ -21,6 +21,7 @@
  */
 import { access } from 'node:fs/promises';
 import { sql } from 'kysely';
+import { AUTO_CAMPAIGN } from '../../../shared/auto-campaign';
 import { stepProblem } from '../../../shared/automations';
 import { usageOf } from '../../../shared/quota';
 import type { Db } from '../../db';
@@ -57,7 +58,7 @@ import {
 import { openLeadConversation } from '../whatsapp/store';
 import { evaluateConditions, type LeadFacts } from './conditions';
 import { type LeadForRun, leadEligibility } from './eligibility';
-import { orderByUtilization } from './queue';
+import { campaignInstanceIds, orderByUtilization } from './queue';
 import { type RenderData, renderMessage } from './renderer';
 import { cancelOrphanedRuns, REASON, recoverStuckRuns } from './runs';
 import { BATCH_SIZE, MAX_ATTEMPTS, RETRY_SECONDS, scheduleAfter } from './schedule';
@@ -67,12 +68,29 @@ import {
   insideSchedule,
   isoWeekday,
   nextScheduleOpening,
+  type Schedule,
   scheduleOf,
   spInstant,
   spTime,
 } from './window';
 
 type Tx = Db;
+
+/**
+ * Horário comercial para o que roda FORA de campanha (execução manual pela API) e precisa esperar o dia seguinte: o mesmo
+ * da campanha automática (dias úteis, 10:00 às 16:00). Antes esperava a meia-noite, e o contato saía às 00:00.
+ */
+const BUSINESS_HOURS: Schedule = {
+  startMin: AUTO_CAMPAIGN.windowStartMin,
+  endMin: AUTO_CAMPAIGN.windowEndMin,
+  days: AUTO_CAMPAIGN.days,
+  startDate: null,
+  endDate: null,
+};
+
+/** Situações em que o lead pode receber o PRIMEIRO envio de uma campanha: as do filtro dela (padrão: só pendente). */
+const firstContactStatuses = (campaign: AutomationCampaign | undefined): readonly string[] =>
+  campaign?.filters.status?.length ? campaign.filters.status : ['pendente'];
 
 export interface CycleResult {
   claimed: number;
@@ -345,12 +363,13 @@ async function decide(tx: Tx, claimed: AutomationRun, now: Date): Promise<Decisi
   const eligibility = await leadEligibility(tx, run.lead_id);
   if ('reason' in eligibility) return ended(await cancelRun(tx, run, eligibility.reason));
   const lead = eligibility.lead;
-  // Campanha: o lead só recebe o PRIMEIRO envio se ainda estiver na fila livre. Se um atendente o pegou ou
-  // chamou no meio do caminho, a campanha sai da frente (a vaga do número volta).
+  // Campanha: o lead só recebe o PRIMEIRO envio se continuar livre (sem atendente) e numa situação que o público dela
+  // aceita (padrão: pendente; "já chamado" só se o filtro pedir). Se um atendente o pegou ou chamou no meio do caminho,
+  // a campanha sai da frente (a vaga do número volta).
   if (
     run.campaign_id !== null &&
     run.current_step === 1 &&
-    (lead.status !== 'pendente' || lead.assigned_to !== null)
+    (lead.assigned_to !== null || !firstContactStatuses(campaign).includes(lead.status))
   ) {
     return ended(await cancelRun(tx, run, REASON.leadTaken));
   }
@@ -362,7 +381,9 @@ async function decide(tx: Tx, claimed: AutomationRun, now: Date): Promise<Decisi
     audioMode: step.audio_mode,
   });
   if (problem)
-    return ended(await failStep(tx, run, step, existing, 'etapa_invalida', `Etapa incompleta: ${problem}`));
+    return ended(
+      await failStep(tx, run, step, existing, 'etapa_invalida', `Etapa incompleta: ${problem}`, now),
+    );
 
   // Contato NOVO de campanha (etapa 1): o número precisa ter vaga na cota do DIA EM QUE O ENVIO ACONTECE, somando os
   // contatos manuais e automáticos (ver whatsapp/quota.ts). Janela e cota são regras independentes: as duas precisam valer.
@@ -394,6 +415,7 @@ async function decide(tx: Tx, claimed: AutomationRun, now: Date): Promise<Decisi
         existing,
         'conversa_ambigua',
         'Há mais de uma conversa deste lead neste número.',
+        now,
       ),
     );
   }
@@ -443,6 +465,7 @@ async function decide(tx: Tx, claimed: AutomationRun, now: Date): Promise<Decisi
           existing,
           'variavel_desconhecida',
           `Variável que não existe: ${names}.`,
+          now,
         ),
       );
     }
@@ -450,7 +473,7 @@ async function decide(tx: Tx, claimed: AutomationRun, now: Date): Promise<Decisi
   } else {
     const pick = await chooseAudio(tx, run, step, existing);
     if (typeof pick === 'string')
-      return ended(await failStep(tx, run, step, existing, 'audio_indisponivel', pick));
+      return ended(await failStep(tx, run, step, existing, 'audio_indisponivel', pick, now));
     message = { kind: 'audio', audio: pick };
   }
 
@@ -570,7 +593,7 @@ async function noCapacity(
 ): Promise<Outcome> {
   const today = quotaDate(now);
   const limit = effectiveLimit(campaign?.daily_limit);
-  const others = campaign ? campaign.instance_ids.filter((id) => id !== instance.id) : [];
+  const others = campaign ? (await campaignInstanceIds(tx, campaign)).filter((id) => id !== instance.id) : [];
   if (campaign && others.length) {
     const open = (
       await tx
@@ -615,9 +638,10 @@ async function noCapacity(
     campaignId: campaign?.id ?? null,
   });
   // Sem vaga em número nenhum hoje: o contato espera o próximo dia. Numa campanha, o próximo dia permitido na abertura da
-  // janela; numa execução da API, o começo do dia seguinte. Amanhã ele conta na cota de amanhã.
+  // janela; numa execução da API, a abertura do próximo dia útil (10:00), nunca a madrugada. Amanhã ele conta na cota de
+  // amanhã.
   const tomorrow = spInstant(addDays(today, 1), 0);
-  if (!campaign) return postponeRun(tx, run, tomorrow);
+  if (!campaign) return postponeRun(tx, run, nextScheduleOpening(tomorrow, BUSINESS_HOURS) ?? tomorrow);
   const opening = nextScheduleOpening(tomorrow, scheduleOf(campaign));
   return opening ? postponeRun(tx, run, opening) : cancelRun(tx, run, REASON.endDate);
 }
@@ -647,7 +671,7 @@ async function postponeRun(tx: Tx, run: AutomationRun, at: Date): Promise<Outcom
 /**
  * Primeiro envio de uma campanha: o lead passa a "Chamado · Mensagem enviada" (o mesmo que o Chamar faz), sem
  * atendente. Assim ele sai da fila livre e o resultado muda sozinho para "Respondeu" quando ele responder.
- * Só mexe em lead que ainda está pendente e sem atendente.
+ * Só mexe em lead sem atendente (pendente, ou já chamado quando o público da campanha inclui os já chamados).
  */
 async function markContactedByCampaign(
   tx: Tx,
@@ -666,7 +690,7 @@ async function markContactedByCampaign(
       updated_at: sql`now()`,
     })
     .where('id', '=', leadId)
-    .where('status', '=', 'pendente')
+    .where('status', 'in', ['pendente', 'chamado'])
     .where('assigned_to', 'is', null)
     .where('anonymized_at', 'is', null)
     .returning('id')
@@ -700,7 +724,7 @@ async function markLeadWithoutWhatsapp(tx: Tx, leadId: number, campaignId: numbe
       updated_at: sql`now()`,
     })
     .where('id', '=', leadId)
-    .where('status', '=', 'pendente')
+    .where('status', 'in', ['pendente', 'chamado'])
     .where('assigned_to', 'is', null)
     .returning('id')
     .executeTakeFirst();
@@ -737,6 +761,7 @@ async function resolveExisting(
         existing,
         REASON.interrupted,
         'O envio desta etapa foi interrompido e não dá para saber se a mensagem saiu. Não foi reenviada.',
+        now,
       );
     case 'pending':
       if (existing.attempts >= MAX_ATTEMPTS) {
@@ -747,11 +772,20 @@ async function resolveExisting(
           existing,
           'tentativas_esgotadas',
           `A etapa não foi enviada depois de ${existing.attempts} tentativas (número desconectado).`,
+          now,
         );
       }
       return null; // nova tentativa: a mensagem sabidamente não saiu
     default:
-      return failStep(tx, run, step, existing, 'erro_interno', existing.error ?? 'A etapa já tinha falhado.');
+      return failStep(
+        tx,
+        run,
+        step,
+        existing,
+        'erro_interno',
+        existing.error ?? 'A etapa já tinha falhado.',
+        now,
+      );
   }
 }
 
@@ -934,11 +968,12 @@ async function failStep(
   existing: AutomationStepRun | undefined,
   code: string,
   error: string,
+  now: Date,
 ): Promise<Outcome> {
   if (existing) {
     await tx
       .updateTable('automation_step_runs')
-      .set({ status: 'failed', error, finished_at: sql`now()`, updated_at: sql`now()` })
+      .set({ status: 'failed', error, finished_at: now, updated_at: sql`now()` })
       .where('id', '=', existing.id)
       .execute();
   } else {
@@ -948,8 +983,8 @@ async function failStep(
         automation_run_id: run.id,
         step_id: step.id,
         status: 'failed',
-        scheduled_at: run.next_run_at ?? new Date(),
-        finished_at: new Date(),
+        scheduled_at: run.next_run_at ?? now,
+        finished_at: now,
         error,
       })
       .execute();

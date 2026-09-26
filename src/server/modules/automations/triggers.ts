@@ -22,7 +22,7 @@ import { auditContactLimit, checkInstanceDailyQuota, limitReachedError, quotaDat
 import { INELIGIBLE_MESSAGES, leadEligibility } from './eligibility';
 import { listRuns } from './runs';
 import { scheduleAfter } from './schedule';
-import { loadSteps, stepDto } from './service';
+import { assertNotSystem, loadSteps, stepDto } from './service';
 
 interface NewRun {
   automationId: number;
@@ -74,6 +74,7 @@ export async function triggerLeadCalled(db: Db, event: LeadCalledEvent): Promise
     .select('id')
     .where('trigger_type', '=', 'lead_called')
     .where('status', '=', 'active')
+    .where('system_key', 'is', null)
     .orderBy('id')
     .execute();
   if (!automations.length) return 0;
@@ -133,10 +134,11 @@ export async function startManualRun(
 ): Promise<AutomationRunItem> {
   const automation = await db
     .selectFrom('automations')
-    .select(['id', 'status', 'trigger_type'])
+    .select(['id', 'status', 'trigger_type', 'system_key'])
     .where('id', '=', automationId)
     .executeTakeFirst();
   if (!automation) throw notFound('Automação não encontrada.');
+  assertNotSystem(automation);
   if (automation.status === 'archived') throw conflict('Uma automação arquivada não pode ser executada.');
   if (automation.status !== 'active') throw conflict('A automação precisa estar ativa para ser executada.');
   if (automation.trigger_type !== 'manual') {

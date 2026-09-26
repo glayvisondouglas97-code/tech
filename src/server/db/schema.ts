@@ -218,6 +218,8 @@ export interface WaConversationsTable {
   /** Lead chamado por esta conversa (marca sozinho "Mensagem enviada" e "Respondeu"). */
   lead_id: number | null;
   created_at: Generated<Date>;
+  /** Quando um envio segurou a vaga do PRIMEIRO contato desta conversa (um contato novo gasta uma vaga só). */
+  contact_claimed_at: Generated<Date | null>;
 }
 
 /** Mensagem apagada pelo sistema: a importação de histórico e os webhooks repetidos não a trazem de volta. */
@@ -283,6 +285,8 @@ export interface AutomationsTable {
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
   archived_at: NullableTimestamp;
+  /** Automação criada e mantida pelo próprio sistema (ex.: a campanha automática). Vazio nas demais. */
+  system_key: Generated<string | null>;
 }
 
 /** Uma etapa da automação, na ordem de `position` (a partir de 1). */
@@ -358,7 +362,12 @@ export interface AutomationCampaignsTable {
   automation_id: number;
   list_id: string | null;
   status: Generated<CampaignStatus>;
+  /** Números permitidos. Vazio quando `all_numbers` (todos os cadastrados, lidos a cada ciclo). */
   instance_ids: number[];
+  /** O público é a fila livre de todas as listas não arquivadas (sem `list_id`). */
+  all_lists: Generated<boolean>;
+  /** Os números são todos os cadastrados (número novo entra sozinho). */
+  all_numbers: Generated<boolean>;
   /** Janela de envio em minutos desde a meia-noite de São Paulo: [início, fim). */
   window_start_min: number;
   window_end_min: number;

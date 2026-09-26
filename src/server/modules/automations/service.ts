@@ -136,6 +136,16 @@ export async function lockAutomation(db: Db, id: number): Promise<Automation> {
   return row;
 }
 
+/**
+ * A automação do sistema (a campanha automática) é definida pelo backend: ninguém a altera, pausa, arquiva, executa ou
+ * muda as etapas pela API genérica. Ela só é ligada e desligada pela tela da campanha automática.
+ */
+export function assertNotSystem(automation: { system_key: string | null }): void {
+  if (automation.system_key !== null) {
+    throw conflict('A campanha automática é definida pelo sistema: use Ativar ou Pausar na aba Automações.');
+  }
+}
+
 /** Nome repetido entre as automações não arquivadas (índice único por nome, sem diferenciar maiúsculas). */
 function nameTaken(error: unknown): never {
   const e = error as { code?: string; constraint?: string };
@@ -152,6 +162,7 @@ function nameTaken(error: unknown): never {
 export async function listAutomations(db: Db, _user: AuthUser, archived = false): Promise<AutomationItem[]> {
   const rows = await withCreator(db)
     .where('a.archived_at', archived ? 'is not' : 'is', null)
+    .where('a.system_key', 'is', null)
     .orderBy('a.id', 'desc')
     .execute();
   const ids = rows.map((r) => r.id);
@@ -210,7 +221,16 @@ export async function updateAutomation(
 ): Promise<AutomationItem> {
   await db.transaction().execute(async (trx) => {
     const current = await lockAutomation(trx, id);
+    assertNotSystem(current);
     if (current.status === 'archived') throw conflict('Uma automação arquivada não pode ser alterada.');
+    // Trocar o gatilho de uma automação ativa mudaria quem entra nela no meio do caminho: pause antes.
+    if (
+      changes.trigger !== undefined &&
+      changes.trigger !== current.trigger_type &&
+      current.status === 'active'
+    ) {
+      throw conflict('Pause a automação antes de trocar o gatilho.');
+    }
 
     const set: { name?: string; description?: string | null; trigger_type?: AutomationTrigger } = {};
     if (changes.name !== undefined && changes.name !== current.name) set.name = changes.name;
@@ -244,7 +264,7 @@ export async function updateAutomation(
 
 /**
  * Ativa ou pausa, conferindo `canChangeStatus` com a linha travada. 409 se a mudança não for permitida
- * ou se, ao ativar, faltar etapa ou houver etapa incompleta. Ativa não executa nada (ainda não há executor).
+ * ou se, ao ativar, faltar etapa ou houver etapa incompleta. Quem executa a automação ativa é o executor (job).
  */
 export async function setAutomationStatus(
   db: Db,
@@ -255,6 +275,7 @@ export async function setAutomationStatus(
 ): Promise<AutomationItem> {
   await db.transaction().execute(async (trx) => {
     const current = await lockAutomation(trx, id);
+    assertNotSystem(current);
     if (!canChangeStatus(current.status, status)) throw conflict(statusChangeProblem(current.status, status));
     if (status === 'active') {
       if (current.trigger_type === 'lead_created') {
@@ -310,6 +331,7 @@ export async function archiveAutomation(
 ): Promise<AutomationItem> {
   await db.transaction().execute(async (trx) => {
     const current = await lockAutomation(trx, id);
+    assertNotSystem(current);
     if (!canChangeStatus(current.status, 'archived')) {
       throw conflict(statusChangeProblem(current.status, 'archived'));
     }

@@ -13,11 +13,21 @@ const JOB_LOCK = 720_002;
 /** Trava própria das automações: um envio lento não segura a limpeza nem a devolução de leads (e vice-versa). */
 const AUTOMATION_LOCK = 720_003;
 
-/** Roda a tarefa só em um servidor por vez (se houver mais de um). */
+/**
+ * Roda a tarefa só em um servidor por vez (se houver mais de um). A trava é de SESSÃO, numa conexão separada e sem
+ * transação: antes ela ficava numa transação aberta durante o ciclo inteiro (inclusive nas chamadas à Evolution), o que
+ * deixava uma conexão "idle in transaction" por minutos e atrapalhava a limpeza do PostgreSQL. Se o processo cair, a
+ * conexão fecha e a trava solta sozinha.
+ */
 async function exclusive(db: Db, fn: () => Promise<void>, lock = JOB_LOCK): Promise<void> {
-  await db.transaction().execute(async (trx) => {
-    const r = await sql<{ ok: boolean }>`SELECT pg_try_advisory_xact_lock(${lock}) AS ok`.execute(trx);
-    if (r.rows[0]?.ok) await fn();
+  await db.connection().execute(async (conn) => {
+    const r = await sql<{ ok: boolean }>`SELECT pg_try_advisory_lock(${lock}) AS ok`.execute(conn);
+    if (!r.rows[0]?.ok) return;
+    try {
+      await fn();
+    } finally {
+      await sql`SELECT pg_advisory_unlock(${lock})`.execute(conn);
+    }
   });
 }
 

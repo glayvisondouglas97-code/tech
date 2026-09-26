@@ -107,7 +107,10 @@ describe('scheduler: um job de automações, sem timer por lead ou por campanha'
     const code = text(join(ROOT, 'server/jobs/scheduler.ts'));
     expect(code.match(/advanceCampaigns\(/g)).toHaveLength(1);
     expect(code.match(/runAutomationCycle\(/g)).toHaveLength(1);
-    expect(code).toMatch(/pg_try_advisory_xact_lock/);
+    // Trava de sessão (sem transação aberta durante o ciclo) e sempre solta no fim.
+    expect(code).toMatch(/pg_try_advisory_lock/);
+    expect(code).toMatch(/pg_advisory_unlock/);
+    expect(code).not.toMatch(/pg_try_advisory_xact_lock/);
     expect(code).toMatch(/AUTOMATION_LOCK/);
   });
 

@@ -237,6 +237,7 @@ export const CAMPAIGN_END_LABELS: Record<string, string> = {
   lista_arquivada: 'A lista da campanha foi arquivada',
   data_final: 'Chegou a data final da campanha',
   automacao_arquivada: 'A automação foi arquivada',
+  substituida_campanha_automatica: 'Substituída pela campanha automática',
 };
 
 export const campaignEndLabel = (reason: string | null): string | null =>
