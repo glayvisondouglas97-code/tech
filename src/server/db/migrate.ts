@@ -15,6 +15,7 @@ import * as m0012 from './migrations/0012_campanhas';
 import * as m0013 from './migrations/0013_cota_diaria_numeros';
 import * as m0014 from './migrations/0014_campanhas_agenda';
 import * as m0015 from './migrations/0015_backfill_cota_diaria';
+import * as m0016 from './migrations/0016_campanha_automatica';
 
 /** Lista fixa de migrações: funciona igual no código TypeScript e no build empacotado. */
 const migrations: Record<string, Migration> = {
@@ -33,6 +34,7 @@ const migrations: Record<string, Migration> = {
   '0013_cota_diaria_numeros': m0013,
   '0014_campanhas_agenda': m0014,
   '0015_backfill_cota_diaria': m0015,
+  '0016_campanha_automatica': m0016,
 };
 
 class StaticProvider implements MigrationProvider {

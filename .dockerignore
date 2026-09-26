@@ -6,6 +6,9 @@
 .data
 media
 backups
-tests/.tmp
+**/tests/.tmp
 test-results
 playwright-report
+# Sobra da antiga pasta do projeto (só arquivos de teste); não entra na imagem.
+leads
+cls

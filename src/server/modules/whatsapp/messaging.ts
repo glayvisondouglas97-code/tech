@@ -1,5 +1,5 @@
 /** Envio pelo mesmo número da conversa (texto, áudio e arquivos) e marcação de lidas no WhatsApp. */
-import type { Kysely } from 'kysely';
+import { type Kysely, sql } from 'kysely';
 import { INSTANCE_DAILY_CONTACT_LIMIT } from '../../../shared/quota';
 import type { Database, WaInstance, WaMessage } from '../../db/schema';
 import { AppError, conflict, notFound } from '../../lib/errors';
@@ -112,11 +112,21 @@ export async function sendAndStore(
 
   // Contato novo feito por uma pessoa (botão Chamar ou primeira mensagem digitada para um lead): segura a vaga do dia
   // do número ANTES de enviar. Cota cheia = não envia. O mesmo mecanismo protege as campanhas (ver quota.ts).
+  // A conversa é marcada primeiro (`contact_claimed_at`, de forma atômica): se dois envios chegarem juntos numa conversa
+  // nova (clique duplo, áudio e texto ao mesmo tempo), só o primeiro conta como contato novo e gasta a vaga.
   let claim: QuotaClaim | null = null;
-  if (actor.countsAsContact && conversation.lead_id !== null && (await isFirstContact(db, conversation.id))) {
+  let markedConversation = false;
+  if (
+    actor.countsAsContact &&
+    conversation.lead_id !== null &&
+    (await isFirstContact(db, conversation.id)) &&
+    (await markContactClaim(db, conversation.id))
+  ) {
+    markedConversation = true;
     const date = quotaDate();
     claim = await claimContactQuota(db, instance.id, date);
     if (!claim) {
+      await unmarkContactClaim(db, conversation.id);
       const { usage } = await checkInstanceDailyQuota(db, instance.id, date);
       await auditContactLimit(db, {
         instanceId: instance.id,
@@ -138,6 +148,7 @@ export async function sendAndStore(
       await releaseContactQuota(db, claim).catch((e) =>
         console.error('[cota] não devolveu a vaga:', (e as Error).message),
       );
+      if (markedConversation) await unmarkContactClaim(db, conversation.id).catch(() => {});
       notifyUsageChanged(instance.id);
     }
     return evolutionFailure(error, 'Não foi possível enviar');
@@ -223,6 +234,30 @@ export async function sendAndStore(
     stored?.reject(error);
     throw error;
   }
+}
+
+/**
+ * Marca que um envio segurou a vaga do primeiro contato desta conversa. Devolve false se outro envio já tinha marcado
+ * (então este não é contato novo e não gasta outra vaga).
+ */
+async function markContactClaim(db: Kysely<Database>, conversationId: number): Promise<boolean> {
+  const marked = await db
+    .updateTable('wa_conversations')
+    .set({ contact_claimed_at: sql`now()` })
+    .where('id', '=', conversationId)
+    .where('contact_claimed_at', 'is', null)
+    .returning('id')
+    .executeTakeFirst();
+  return !!marked;
+}
+
+/** A vaga não foi usada (cota cheia ou recusa clara da Evolution): a conversa volta a poder ser contato novo. */
+async function unmarkContactClaim(db: Kysely<Database>, conversationId: number): Promise<void> {
+  await db
+    .updateTable('wa_conversations')
+    .set({ contact_claimed_at: null })
+    .where('id', '=', conversationId)
+    .execute();
 }
 
 /** Ao responder, marca como lidas no WhatsApp as mensagens do contato que estavam sem resposta. */

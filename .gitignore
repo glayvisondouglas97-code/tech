@@ -10,7 +10,8 @@ dist/
 coverage/
 test-results/
 playwright-report/
-tests/.tmp/
+# Qualquer pasta tests/.tmp, em qualquer nível (banco do e2e, screenshots, planilhas geradas).
+**/tests/.tmp/
 *.log
 
 # Mídias do WhatsApp (no Docker ficam num volume próprio)

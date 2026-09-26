@@ -6,7 +6,7 @@
  * das etapas, já na ordem nova (criar e excluir mudam a posição das outras).
  *
  * Aqui só se guarda configuração. Nada agenda, executa condições, espera o atraso ou envia mensagem:
- * isso é do executor, que vem depois. Também não chama a Evolution.
+ * isso é do executor (`executor.ts`, chamado pelo job). Também não chama a Evolution.
  */
 import { sql } from 'kysely';
 import { AUTOMATION_MAX_STEPS, stepProblem } from '../../../shared/automations';
@@ -15,14 +15,15 @@ import type { Db } from '../../db';
 import type { Automation, AutomationStep as AutomationStepRow } from '../../db/schema';
 import { audit } from '../../lib/audit';
 import { badRequest, conflict, notFound } from '../../lib/errors';
-import { lockAutomation, stepDto } from './service';
+import { assertNotSystem, lockAutomation, stepDto } from './service';
 import type { AutomationCondition, AutomationStep } from './types';
 import type { NewStepInput, StepChangesInput } from './validation';
 
 const STEP_NOT_FOUND = 'Etapa não encontrada.';
 
-/** Automação arquivada fica só para consulta: não recebe, muda nem perde etapas. */
+/** Automação arquivada fica só para consulta; a do sistema é fixa: nenhuma recebe, muda nem perde etapas. */
 function assertEditable(automation: Automation): void {
+  assertNotSystem(automation);
   if (automation.status === 'archived') {
     throw conflict('Uma automação arquivada não pode ser alterada: ela fica só para consulta.');
   }

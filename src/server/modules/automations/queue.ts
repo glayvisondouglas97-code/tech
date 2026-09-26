@@ -40,7 +40,32 @@ export const MAX_RESERVATIONS_PER_CYCLE = 10;
 
 export type Reservation =
   | { kind: 'reserved'; runId: number; leadId: number }
-  | { kind: 'skipped' | 'limit' | 'busy' | 'no_leads' | 'closed' | 'conflict' };
+  | { kind: 'skipped' | 'limit' | 'busy' | 'no_leads' | 'no_audio' | 'closed' | 'conflict' };
+
+/**
+ * Os números da campanha: os escolhidos, ou TODOS os cadastrados (`all_numbers`, a campanha automática), lidos agora. Número
+ * novo entra sozinho no rodízio; número excluído some sozinho.
+ */
+export async function campaignInstanceIds(
+  db: Db,
+  campaign: Pick<AutomationCampaign, 'instance_ids' | 'all_numbers'>,
+): Promise<number[]> {
+  if (!campaign.all_numbers) return campaign.instance_ids;
+  const rows = await db.selectFrom('wa_instances').select('id').orderBy('id').execute();
+  return rows.map((r) => r.id);
+}
+
+/** Há pelo menos um áudio ativo (e com arquivo) na biblioteca? */
+export async function hasActiveAudio(db: Db): Promise<boolean> {
+  const row = await db
+    .selectFrom('wa_audios')
+    .select('id')
+    .where('active', '=', true)
+    .where('media_path', '<>', '')
+    .limit(1)
+    .executeTakeFirst();
+  return !!row;
+}
 
 /**
  * Reserva o próximo lead para um número, numa transação. Tudo aqui é seguro contra concorrência: a trava do
@@ -62,8 +87,10 @@ export async function reserveNext(
       .where('id', '=', campaignId)
       .forShare()
       .executeTakeFirst();
-    if (campaign?.status !== 'active' || campaign.list_id === null) return { kind: 'skipped' };
-    if (!campaign.instance_ids.includes(instanceId)) return { kind: 'skipped' };
+    if (campaign?.status !== 'active' || (campaign.list_id === null && !campaign.all_lists)) {
+      return { kind: 'skipped' };
+    }
+    if (!campaign.all_numbers && !campaign.instance_ids.includes(instanceId)) return { kind: 'skipped' };
     const automation = await trx
       .selectFrom('automations')
       .select('status')
@@ -106,11 +133,16 @@ export async function reserveNext(
 
     const first = await trx
       .selectFrom('automation_steps')
-      .select('delay_seconds')
+      .select(['delay_seconds', 'action_type', 'audio_mode'])
       .where('automation_id', '=', campaign.automation_id)
       .where('position', '=', 1)
       .executeTakeFirst();
     if (!first) return { kind: 'skipped' };
+    // Etapa que sorteia áudio sem nenhum áudio ativo: não reserva ninguém. Reservar agora só faria a etapa falhar e o
+    // lead sair da campanha sem ter recebido nada.
+    if (first.action_type === 'send_audio' && first.audio_mode === 'random' && !(await hasActiveAudio(trx))) {
+      return { kind: 'no_audio' };
+    }
 
     // Quem entra vem do público da campanha (lista, filtros, bloqueio, cooldown, participação): uma regra só.
     const audience = audienceConfigOf(campaign);
@@ -174,7 +206,8 @@ export interface TickResult {
 /**
  * Um ciclo das campanhas: para cada campanha ativa (de automação ativa), reserva leads para os números que
  * precisam, do menos usado ao mais usado (empate: sorteio), até `maxReservations` no ciclo. Encerra sozinha a
- * campanha cuja lista acabou. Sem Evolution configurada não faz nada.
+ * campanha cuja lista acabou (a automática, de todas as listas, nunca termina sozinha). Sem Evolution configurada não
+ * faz nada.
  */
 export async function advanceCampaigns(
   db: Db,
@@ -217,18 +250,21 @@ async function advanceOne(
   room: number,
 ): Promise<TickResult> {
   const result: TickResult = { reserved: 0, finished: 0, campaignIds: [] };
-  if (campaign.list_id === null) {
-    if (await endCampaign(db, campaign.id, 'stopped', REASON.listRemoved)) result.finished += 1;
-    return result;
-  }
-  const list = await db
-    .selectFrom('lists')
-    .select('archived_at')
-    .where('id', '=', campaign.list_id)
-    .executeTakeFirst();
-  if (list?.archived_at) {
-    if (await endCampaign(db, campaign.id, 'stopped', REASON.listArchived)) result.finished += 1;
-    return result;
+  // Campanha de UMA lista: lista excluída ou arquivada encerra. A de todas as listas (automática) não depende de nenhuma.
+  if (!campaign.all_lists) {
+    if (campaign.list_id === null) {
+      if (await endCampaign(db, campaign.id, 'stopped', REASON.listRemoved)) result.finished += 1;
+      return result;
+    }
+    const list = await db
+      .selectFrom('lists')
+      .select('archived_at')
+      .where('id', '=', campaign.list_id)
+      .executeTakeFirst();
+    if (list?.archived_at) {
+      if (await endCampaign(db, campaign.id, 'stopped', REASON.listArchived)) result.finished += 1;
+      return result;
+    }
   }
   // Agenda. Antes da data inicial: agendada, nada é reservado. Depois da data final: termina (o que já foi enviado fica).
   const today = spDate(now);
@@ -245,18 +281,17 @@ async function advanceOne(
 
   // O rodízio só considera os números com vaga hoje (o cheio sai do pool até o dia seguinte).
   const limit = effectiveLimit(campaign.daily_limit);
-  const usage = await instanceUsage(db, campaign.instance_ids, today, limit);
+  const instanceIds = await campaignInstanceIds(db, campaign);
+  const usage = await instanceUsage(db, instanceIds, today, limit);
   const totals = new Map([...usage].map(([id, u]) => [id, u.total] as const));
-  for (const instanceId of orderByUtilization(
-    poolWithCapacity(campaign.instance_ids, usage, limit),
-    totals,
-    limit,
-  )) {
+  for (const instanceId of orderByUtilization(poolWithCapacity(instanceIds, usage, limit), totals, limit)) {
     if (result.reserved >= room) break;
     const reservation = await reserveNext(db, campaign.id, instanceId, now);
     if (reservation.kind === 'reserved') result.reserved += 1;
+    if (reservation.kind === 'no_audio') break;
     if (reservation.kind === 'no_leads') {
-      if (await finishIfExhausted(db, campaign)) result.finished += 1;
+      // A campanha automática (todas as listas) nunca termina sozinha: leads novos chegam a cada importação.
+      if (!campaign.all_lists && (await finishIfExhausted(db, campaign, now))) result.finished += 1;
       break;
     }
   }
@@ -264,12 +299,12 @@ async function advanceOne(
 }
 
 /** A lista acabou e ninguém está esperando (nem para o próximo passo)? Então a campanha termina. */
-async function finishIfExhausted(db: Db, campaign: AutomationCampaign): Promise<boolean> {
+async function finishIfExhausted(db: Db, campaign: AutomationCampaign, now: Date): Promise<boolean> {
   if (campaign.list_id === null) return false;
   const audience = audienceConfigOf(campaign);
   if (!audience) return false;
   // Ainda há alguém a quem esta campanha pode escrever? (só estavam ocupados neste instante)
-  if ((await getCampaignEligibleLeads(db, audience, new Date(), { limit: 1 })).length) return false;
+  if ((await getCampaignEligibleLeads(db, audience, now, { limit: 1 })).length) return false;
   const live = await db
     .selectFrom('automation_runs')
     .select('id')

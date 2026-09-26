@@ -6,9 +6,9 @@
  * - a prévia e o painel (contadores agregados numa consulta só, sem carregar nenhum lead).
  * Nem a interface nem a fila repetem essas regras: o backend é a autoridade.
  *
- * Um lead é elegível quando (alias da tabela: `l`): pertence à lista (que não está arquivada); tem a situação permitida
- * (padrão: pendente, ou seja, na fila livre) e não tem atendente; não foi anonimizado; tem telefone utilizável; não está
- * em "não contatar"; não tem resultado "Sem WhatsApp"; passa pelos filtros (DDD, resultado, tipo de telefone, chamado
+ * Um lead é elegível quando (alias da tabela: `l`): pertence à lista (ou a qualquer lista, na campanha automática), que
+ * não está arquivada; tem a situação permitida (padrão: pendente, ou seja, na fila livre) e não tem atendente; não foi
+ * anonimizado; tem telefone utilizável; não está em "não contatar"; não tem resultado "Sem WhatsApp"; passa pelos filtros (DDD, resultado, tipo de telefone, chamado
  * antes); nunca participou desta automação (nem desta campanha); não está no meio de uma execução de OUTRA campanha; e não
  * está em cooldown.
  *
@@ -22,7 +22,8 @@ import type { Db } from '../../db';
 import type { AutomationCampaign } from '../../db/schema';
 
 export interface AudienceConfig {
-  listId: string;
+  /** A lista da campanha, ou null para a fila livre de TODAS as listas não arquivadas (campanha automática). */
+  listId: string | null;
   automationId: number;
   /** A campanha já criada (quem já entrou nela sai do público). Vazio na prévia, antes de criar. */
   campaignId: number | null;
@@ -31,13 +32,16 @@ export interface AudienceConfig {
   cooldownHours: number;
 }
 
-/** O público de uma campanha que já existe (vazio se a lista foi excluída). */
+/** O público de uma campanha que já existe (vazio se a lista foi excluída; todas as listas em `all_lists`). */
 export function audienceConfigOf(
-  c: Pick<AutomationCampaign, 'id' | 'automation_id' | 'list_id' | 'filters' | 'cooldown_hours'>,
+  c: Pick<
+    AutomationCampaign,
+    'id' | 'automation_id' | 'list_id' | 'all_lists' | 'filters' | 'cooldown_hours'
+  >,
 ): AudienceConfig | null {
-  if (c.list_id === null) return null;
+  if (c.list_id === null && !c.all_lists) return null;
   return {
-    listId: c.list_id,
+    listId: c.all_lists ? null : c.list_id,
     automationId: c.automation_id,
     campaignId: c.id,
     filters: c.filters,
@@ -51,13 +55,18 @@ type Cond = RawBuilder<boolean>;
 function conditions(cfg: AudienceConfig, now: Date) {
   const f = cfg.filters;
   const statuses = f.status?.length ? f.status : ['pendente'];
+  // Só "pendente" (o padrão) vira texto fixo: assim o PostgreSQL usa o índice da fila livre (`leads_free_idx`), que é o
+  // que mantém rápida a busca na base inteira da campanha automática.
+  const onlyPending = statuses.length === 1 && statuses[0] === 'pendente';
   const phone: Cond = f.phoneType?.length
     ? sql<boolean>`(l.phone <> '' AND l.phone_type = ANY(${[...f.phoneType]}::text[]))`
     : // Sem escolha: celular ou tipo desconhecido (telefone fixo raramente tem WhatsApp).
       sql<boolean>`(l.phone <> '' AND l.phone_type IS DISTINCT FROM 'fixo')`;
   return {
     listArchived: sql<boolean>`NOT EXISTS (SELECT 1 FROM lists li WHERE li.id = l.list_id AND li.archived_at IS NULL)`,
-    statusOk: sql<boolean>`(l.status = ANY(${[...statuses]}::text[]) AND l.status <> 'bloqueado')`,
+    statusOk: onlyPending
+      ? sql<boolean>`(l.status = 'pendente')`
+      : sql<boolean>`(l.status = ANY(${[...statuses]}::text[]) AND l.status <> 'bloqueado')`,
     unassigned: sql<boolean>`(l.assigned_to IS NULL)`,
     anonymized: sql<boolean>`(l.anonymized_at IS NOT NULL)`,
     phoneOk: phone,
@@ -120,6 +129,10 @@ const FILTER_KEYS: readonly Key[] = ['statusOk', 'phoneOk', 'dddOk', 'resultOk',
 
 const and = (list: Cond[]): Cond => sql<boolean>`(${sql.join(list, sql` AND `)})`;
 
+/** A lista da campanha, ou todas (a regra `listArchived` já tira as listas arquivadas). */
+const inList = (cfg: AudienceConfig): Cond =>
+  cfg.listId === null ? sql<boolean>`(true)` : sql<boolean>`(l.list_id = ${cfg.listId})`;
+
 /** A condição de elegibilidade montada com as condições dadas (as reais, ou as colunas de uma CTE). */
 function eligibleWith(get: (key: Key) => Cond): Cond {
   return and(ELIGIBLE.map(([key, wanted]) => (wanted ? get(key) : sql<boolean>`NOT ${get(key)}`)));
@@ -138,7 +151,7 @@ export async function getCampaignEligibleLeads(
   const c = conditions(cfg, now);
   const rows = await sql<{ id: number }>`
     SELECT l.id FROM leads l
-    WHERE l.list_id = ${cfg.listId} AND ${eligibleWith((k) => c[k])}
+    WHERE ${inList(cfg)} AND ${eligibleWith((k) => c[k])}
     ORDER BY l.id
     LIMIT ${opts.limit}
     ${opts.lock ? sql`FOR UPDATE OF l SKIP LOCKED` : sql``}`.execute(db);
@@ -167,9 +180,7 @@ export async function leadFreeOfOtherCampaign(
 export async function countCampaignEligibleLeads(db: Db, cfg: AudienceConfig, now: Date): Promise<number> {
   const c = conditions(cfg, now);
   const r = await sql<{ n: number }>`
-    SELECT count(*) AS n FROM leads l WHERE l.list_id = ${cfg.listId} AND ${eligibleWith((k) => c[k])}`.execute(
-    db,
-  );
+    SELECT count(*) AS n FROM leads l WHERE ${inList(cfg)} AND ${eligibleWith((k) => c[k])}`.execute(db);
   return Number(r.rows[0]?.n ?? 0);
 }
 
@@ -191,7 +202,7 @@ export async function campaignAudienceSummary(
   const ref = (k: Key): Cond => sql<boolean>`${sql.ref(`f.${k}`)}`;
   const filteredOut = sql<boolean>`NOT ${and(FILTER_KEYS.map((k) => ref(k)))}`;
   const r = await sql<Record<keyof CampaignAudience, number>>`
-    WITH f AS (SELECT ${columns} FROM leads l WHERE l.list_id = ${cfg.listId})
+    WITH f AS (SELECT ${columns} FROM leads l WHERE ${inList(cfg)})
     SELECT
       count(*) AS "total",
       count(*) FILTER (WHERE ${eligibleWith(ref)}) AS "eligible",

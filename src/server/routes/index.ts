@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { adminRoutes } from './admin';
 import { authRoutes } from './auth';
+import { autoCampaignRoutes } from './auto-campaign';
 import { automationsRoutes } from './automations';
 import { importRoutes } from './imports';
 import { leadRoutes } from './leads';
@@ -13,4 +14,5 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(adminRoutes);
   await app.register(whatsappRoutes);
   await app.register(automationsRoutes);
+  await app.register(autoCampaignRoutes);
 }

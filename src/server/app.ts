@@ -55,6 +55,8 @@ export async function buildApp(db: Db, config: Config, opts: AppOptions = {}): P
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'blob:'],
+        // blob: é a prévia de um áudio gravado ou escolhido no navegador, antes de enviar (Áudios e Conversas).
+        mediaSrc: ["'self'", 'blob:'],
         fontSrc: ["'self'", 'data:'],
         // Tempo real (WebSocket) no próprio endereço do sistema.
         connectSrc: ["'self'", new URL(config.APP_URL).origin.replace(/^http/, 'ws')],

@@ -54,8 +54,8 @@ import {
   countCampaignEligibleLeads,
 } from './campaign-audience';
 import { buildCalendar, type CapacityNumber, estimateDuration } from './capacity';
-import { endCampaign } from './queue';
-import { loadSteps, lockAutomation, stepDto } from './service';
+import { campaignInstanceIds, endCampaign } from './queue';
+import { assertNotSystem, loadSteps, lockAutomation, stepDto } from './service';
 import {
   dayAllowed,
   followUpSchedule,
@@ -319,7 +319,7 @@ export async function getCampaign(
 ): Promise<CampaignDetail> {
   const row = await loadRow(db, automationId, campaignId);
   const counts = (await countsFor(db, [row.id])).get(row.id) ?? emptyCounts();
-  const numbers = await numbersView(db, row.instance_ids, row.daily_limit, now);
+  const numbers = await numbersView(db, await campaignInstanceIds(db, row), row.daily_limit, now);
   const live = isLive(row);
   const audience = audienceConfigOf(row);
   return {
@@ -443,10 +443,11 @@ export async function previewCampaign(
 ): Promise<CampaignPreview> {
   const automation = await db
     .selectFrom('automations')
-    .select(['id', 'name'])
+    .select(['id', 'name', 'system_key'])
     .where('id', '=', automationId)
     .executeTakeFirst();
   if (!automation) throw notFound('Automação não encontrada.');
+  assertNotSystem(automation);
   const list = await db
     .selectFrom('lists')
     .select(['id', 'name'])
@@ -468,7 +469,7 @@ export async function previewCampaign(
   const capacity = asCapacity(numbers);
   return {
     list,
-    automation,
+    automation: { id: automation.id, name: automation.name },
     audience,
     estimate: estimateDuration(now, schedule, capacity, audience.eligible),
     calendar: buildCalendar(now, schedule, capacity, 14),
@@ -525,6 +526,7 @@ export async function startCampaign(
   requireFutureEnd(settings.endDate, now);
   const id = await db.transaction().execute(async (trx) => {
     const automation = await lockAutomation(trx, automationId);
+    assertNotSystem(automation);
     if (automation.status === 'archived')
       throw conflict('Uma automação arquivada não pode iniciar campanha.');
     if (automation.status !== 'active')
@@ -626,7 +628,18 @@ async function lockCampaign(db: Db, automationId: number, campaignId: number): P
     .forUpdate()
     .executeTakeFirst();
   if (!row) throw notFound(NOT_FOUND);
+  await assertSystemFree(db, automationId);
   return row;
+}
+
+/** A campanha automática só é ligada e desligada pela tela dela (`auto-campaign.ts`), nunca pela API genérica. */
+async function assertSystemFree(db: Db, automationId: number): Promise<void> {
+  const automation = await db
+    .selectFrom('automations')
+    .select('system_key')
+    .where('id', '=', automationId)
+    .executeTakeFirst();
+  if (automation) assertNotSystem(automation);
 }
 
 const ENDED_MESSAGE = 'A campanha já foi encerrada.';
@@ -746,6 +759,25 @@ export async function pauseCampaign(
 }
 
 /**
+ * Ao retomar uma campanha pausada: o que venceu durante a pausa é reagendado, um a cada `RESUME_GAP_SECONDS` por número
+ * (não sai tudo de uma vez). Devolve quantos envios foram reagendados.
+ */
+export async function respaceOverdue(trx: Db, campaignId: number, now: Date): Promise<number> {
+  const respaced = await sql`
+    WITH overdue AS (
+      SELECT id, row_number() OVER (PARTITION BY instance_id ORDER BY next_run_at, id) AS n
+      FROM automation_runs
+      WHERE campaign_id = ${campaignId} AND status = 'pending' AND next_run_at < ${now}
+    )
+    UPDATE automation_runs r
+    SET next_run_at = ${now}::timestamptz + make_interval(secs => ((o.n - 1) * ${RESUME_GAP_SECONDS})::double precision),
+      updated_at = now()
+    FROM overdue o
+    WHERE r.id = o.id`.execute(trx);
+  return Number(respaced.numAffectedRows ?? 0);
+}
+
+/**
  * Retoma de onde parou (sem reenviar nada e sem repetir lead). Os envios que venceram durante a pausa não saem
  * todos de uma vez: são reagendados, um por minuto por número.
  */
@@ -771,23 +803,13 @@ export async function resumeCampaign(
       .set({ status: 'active', updated_at: sql`now()` })
       .where('id', '=', campaignId)
       .execute();
-    const respaced = await sql`
-      WITH overdue AS (
-        SELECT id, row_number() OVER (PARTITION BY instance_id ORDER BY next_run_at, id) AS n
-        FROM automation_runs
-        WHERE campaign_id = ${campaignId} AND status = 'pending' AND next_run_at < ${now}
-      )
-      UPDATE automation_runs r
-      SET next_run_at = ${now}::timestamptz + make_interval(secs => ((o.n - 1) * ${RESUME_GAP_SECONDS})::double precision),
-        updated_at = now()
-      FROM overdue o
-      WHERE r.id = o.id`.execute(trx);
+    const respaced = await respaceOverdue(trx, campaignId, now);
     await audit(trx, {
       userId: user.id,
       action: 'retomou_campanha',
       entity: 'automacao',
       entityId: automationId,
-      details: { campanha: campaignId, envios_reagendados: Number(respaced.numAffectedRows ?? 0) },
+      details: { campanha: campaignId, envios_reagendados: respaced },
       ip,
     });
   });
@@ -807,6 +829,7 @@ export async function stopCampaign(
   ip: string | null,
 ): Promise<CampaignDetail> {
   const row = await loadRow(db, automationId, campaignId);
+  await assertSystemFree(db, automationId);
   if (row.status === 'stopped' || row.status === 'finished') throw conflict(ENDED_MESSAGE);
   const ended = await endCampaign(db, campaignId, 'stopped', END_REASON.manual, user.id, ip);
   if (!ended) throw conflict(ENDED_MESSAGE); // outra pessoa encerrou entre a leitura e agora
@@ -834,8 +857,9 @@ function explain(o: {
     if (!o.numbers.length) out.push('Nenhum dos números da campanha existe mais.');
     else if (!connected.length) out.push('Nenhum número da campanha está conectado agora.');
     else if (connected.every((n) => n.limitReached)) {
+      const limit = connected[0]?.dailyLimit ?? effectiveLimit(o.row.daily_limit);
       out.push(
-        'Todos os números conectados atingiram a cota de hoje (20 contatos): o resto fica para o próximo dia.',
+        `Todos os números conectados atingiram a cota de hoje (${limit} contatos): o resto fica para o próximo dia.`,
       );
     }
     const disconnected = o.numbers.length - connected.length;
@@ -861,7 +885,7 @@ export async function campaignStats(
 ): Promise<CampaignStats> {
   const row = await loadRow(db, automationId, campaignId);
   const counts = (await countsFor(db, [row.id])).get(row.id) ?? emptyCounts();
-  const numbers = await numbersView(db, row.instance_ids, row.daily_limit, now);
+  const numbers = await numbersView(db, await campaignInstanceIds(db, row), row.daily_limit, now);
   const config = audienceConfigOf(row);
   const audience: CampaignAudience = config
     ? await campaignAudienceSummary(db, config, now)
@@ -919,7 +943,7 @@ export async function campaignCalendar(
   now = new Date(),
 ): Promise<CampaignCalendar> {
   const row = await loadRow(db, automationId, campaignId);
-  const numbers = await numbersView(db, row.instance_ids, row.daily_limit, now);
+  const numbers = await numbersView(db, await campaignInstanceIds(db, row), row.daily_limit, now);
   const config = audienceConfigOf(row);
   const eligible = config && isLive(row) ? await countCampaignEligibleLeads(db, config, now) : 0;
   const schedule = scheduleOf(row);
